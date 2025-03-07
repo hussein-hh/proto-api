@@ -3,3 +3,4 @@ PyJWT
 djangorestframework
 mysqlclient
 pymysql
+djangorestframework-simplejwt

@@ -1,5 +1,6 @@
 # Virtual environment
 venv/
+proto-env/
 
 # Bytecode
 __pycache__/
@@ -14,3 +15,6 @@ __pycache__/
 # IDE settings
 *.vscode/
 *.idea/
+
+# user uploads
+uploads/
