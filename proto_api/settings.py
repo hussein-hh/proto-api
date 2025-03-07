@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'Domains.Auth',
     'Domains.Upload',
+    'Domains.Onboard',
 ]
 
 MIDDLEWARE = [
