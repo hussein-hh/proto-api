@@ -4,8 +4,8 @@ from django.contrib.auth.models import User
 from rest_framework import status, permissions, parsers
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .serializers import CreateUploadSerializer
-from .models import CreateUpload
+from .serializers import UploadSerializer
+from .models import Upload
 import os
 
 class FileUploadView(APIView):
@@ -35,9 +35,8 @@ class FileUploadView(APIView):
         if not uploaded_file or not file_name:
             return Response({'error': 'File and name are required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Ensure directory exists
         user_directory = f'uploads/{user.username}'
-        os.makedirs(user_directory, exist_ok=True)  # Create directory if it doesn't exist
+        os.makedirs(user_directory, exist_ok=True) 
 
         file_path = os.path.join(user_directory, uploaded_file.name)
 
@@ -47,13 +46,13 @@ class FileUploadView(APIView):
 
         file_type = uploaded_file.name.split('.')[-1].lower()
 
-        uploaded_file_record = CreateUpload.objects.create(
+        uploaded_file_record = Upload.objects.create(
             path=file_path,
             type=file_type,
             uploaded_by=user,
             name=file_name
         )
 
-        serializer = CreateUploadSerializer(uploaded_file_record)
+        serializer = UploadSerializer(uploaded_file_record)
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)

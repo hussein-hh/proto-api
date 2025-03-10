@@ -3,11 +3,6 @@ from django.contrib.auth import get_user_model
 import os
 import uuid
 
-def upload_file_path(instance, filename):
-    ext = filename.split('.')[-1]
-    filename = f"{uuid.uuid4()}.{ext}"
-    return os.path.join("uploads", f"user_{instance.business.user.id}", f"business_{instance.business.id}", filename)
-
 class Business(models.Model):
     CATEGORY_CHOICES = [
         ("Online Retail", "Online Retail (General E-commerce)"),
@@ -40,8 +35,3 @@ class Business(models.Model):
 
     def __str__(self):
         return self.name
-
-class UploadFile(models.Model):
-    business = models.ForeignKey(Business, on_delete=models.CASCADE, related_name='uploads')
-    file = models.FileField(upload_to=upload_file_path)
-    id = models.BigAutoField(primary_key=True)
