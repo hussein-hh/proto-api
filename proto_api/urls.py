@@ -7,6 +7,6 @@ from django.urls import path, include
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('auth/', include('Domains.Auth.urls')),  
-    path('upload/', include('Domains.Upload.urls')), 
+    path('upload/', include('Domains.ManageData.urls')), 
     path('onboard/', include('Domains.Onboard.urls')), 
 ]

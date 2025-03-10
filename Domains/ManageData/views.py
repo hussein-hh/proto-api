@@ -4,8 +4,8 @@ from django.contrib.auth.models import User
 from rest_framework import status, permissions, parsers
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .serializers import UploadedFileSerializer
-from .models import UploadedFile
+from .serializers import CreateUploadSerializer
+from .models import CreateUpload
 import os
 
 class FileUploadView(APIView):
@@ -20,7 +20,7 @@ class FileUploadView(APIView):
 
         try:
             decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-            user_id = decoded_token.get('user_id')  # Use 'user_id' instead of 'id'
+            user_id = decoded_token.get('user_id')  
 
             if not user_id:
                 return Response({'error': 'Token is missing user ID'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -47,13 +47,13 @@ class FileUploadView(APIView):
 
         file_type = uploaded_file.name.split('.')[-1].lower()
 
-        uploaded_file_record = UploadedFile.objects.create(
+        uploaded_file_record = CreateUpload.objects.create(
             path=file_path,
             type=file_type,
             uploaded_by=user,
             name=file_name
         )
 
-        serializer = UploadedFileSerializer(uploaded_file_record)
+        serializer = CreateUploadSerializer(uploaded_file_record)
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)

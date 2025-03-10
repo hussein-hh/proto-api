@@ -1,7 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 
-class UploadedFile(models.Model):
+class CreateUpload(models.Model):
     class Meta:
         db_table = 'file_uploads'
     FILE_TYPES = (

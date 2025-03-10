@@ -1,8 +1,8 @@
 from rest_framework import serializers
-from .models import UploadedFile
+from .models import CreateUpload
 
-class UploadedFileSerializer(serializers.ModelSerializer):
+class CreateUploadSerializer(serializers.ModelSerializer):
     class Meta:
-        model = UploadedFile
+        model = CreateUpload
         fields = ('id', 'path', 'type', 'uploaded_at')
         read_only_fields = ('id', 'uploaded_at')

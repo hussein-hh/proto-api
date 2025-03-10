@@ -38,7 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'Domains.Auth',
-    'Domains.Upload',
+    'Domains.ManageData',
     'Domains.Onboard',
 ]
 
