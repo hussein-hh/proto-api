@@ -1,6 +1,6 @@
 from django.urls import path
-from .views import onboarding
+from .views import OnboardingAPIView
 
 urlpatterns = [
-    path('onboard/', onboarding, name='onboard'),
+    path('onboard/', OnboardingAPIView.as_view(), name='onboard'),
 ]
