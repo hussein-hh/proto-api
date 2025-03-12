@@ -40,11 +40,15 @@ INSTALLED_APPS = [
     'Domains.Auth',
     'Domains.ManageData',
     'Domains.Onboard',
+    'corsheaders',
+    'rest_framework',
+    'rest_framework.authtoken',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -52,6 +56,12 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",  # React frontend
+    "http://127.0.0.1:3000",  # Ensure both localhost and 127.0.0.1 are covered
+]
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
 import os
 from dotenv import load_dotenv
@@ -93,7 +103,7 @@ WSGI_APPLICATION = 'proto_api.wsgi.application'
 
 from datetime import timedelta
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),  
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=2),  
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),   
     'USER_ID_FIELD': 'id', 
 
