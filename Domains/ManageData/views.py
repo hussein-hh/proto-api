@@ -10,6 +10,8 @@ from rest_framework.response import Response  # makes api responses easier to ma
 from .serializers import UploadSerializer  # imports a serializer to format the uploaded file data
 from .models import Upload  # imports the upload model to save file info in the database
 from Domains.Onboard.models import Business  # imports the business model to link users with businesses
+from django.http import HttpResponse, FileResponse
+import mimetypes
 
 
 def slugify(text):
@@ -240,3 +242,45 @@ class FileRetrieveView(APIView):  # defines an api endpoint for retrieving detai
 
         serializer = UploadSerializer(upload)  # formats the file data
         return Response(serializer.data, status=status.HTTP_200_OK)  # returns the file details as a response
+        
+class FileShowView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, upload_id):
+        token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQxODU4NTg1LCJpYXQiOjE3NDE3NzIxODUsImp0aSI6ImJhNWM3NGUyYjU2NjRhNDdiZWNlYWE1MzY3MTQ2OWYxIiwidXNlcl9pZCI6N30.jDO5uKZuTGlJmxzSSOlJbaOEV5slTAvfroAOC0YeAew"
+
+        if not token:
+            return error_response({'error': 'Token is required in Authorization header'}, status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+            user_id = decoded_token.get('user_id')
+
+            if not user_id:
+                return error_response({'error': 'Token is missing user ID'}, status.HTTP_401_UNAUTHORIZED)
+
+            user = User.objects.get(id=user_id)
+        except Exception as e:
+            return error_response({'error': f'Invalid or expired token: {str(e)}'}, status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            upload = Upload.objects.get(id=upload_id, uploaded_by=user)
+        except Upload.DoesNotExist:
+            return error_response({'error': 'File not found or unauthorized'}, status.HTTP_404_NOT_FOUND)
+
+        file_path = Path(upload.path)
+
+        if not file_path.exists():
+            return error_response({'error': 'File not found on server'}, status.HTTP_404_NOT_FOUND)
+
+        mime_type, _ = mimetypes.guess_type(file_path)
+        if mime_type is None:
+            mime_type = "application/octet-stream"
+
+        # ✅ Handle CSV files correctly
+        if upload.type == "csv":
+            response = HttpResponse(file_path.open("r"), content_type="text/csv")
+            response["Content-Disposition"] = f'inline; filename="{file_path.name}"'
+            return response
+
+        return FileResponse(open(file_path, "rb"), content_type=mime_type)
