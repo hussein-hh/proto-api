@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from .serializers import SignupSerializer, LoginSerializer
+from django.utils.timezone import now
 
 def generate_jwt_token(user):
     refresh = RefreshToken.for_user(user)
@@ -31,11 +32,15 @@ class LoginView(APIView):
             )
 
             if user:
+                first_login = user.last_login is None
+                user.last_login = now()
+                user.save()
                 refresh = RefreshToken.for_user(user)
                 return Response({
                     'message': 'Login successful!',
                     'access': str(refresh.access_token),
                     'refresh': str(refresh),
+                    'first_login': first_login,
                 }, status=status.HTTP_200_OK)
 
             return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
