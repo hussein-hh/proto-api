@@ -245,19 +245,20 @@ class FileRetrieveView(APIView):  # defines an api endpoint for retrieving detai
         
 class FileShowView(APIView):
     permission_classes = [permissions.AllowAny]
+    CHUNK_SIZE = 1024 * 1024  # 1MB chunk limit
 
     def get(self, request, upload_id):
-        token = request.headers.get('Authorization')  # gets the token from the Authorization header
+        token = request.headers.get('Authorization')
 
-        if not token:  # checks if the token is missing
-            return error_response({'error': 'Token is required in Authorization header'}, status.HTTP_401_UNAUTHORIZED)  # sends an error response
+        if not token:
+            return error_response({'error': 'Token is required in Authorization header'}, status.HTTP_401_UNAUTHORIZED)
 
         try:
-            decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])  # decodes the token using the secret key
-            user_id = decoded_token.get('user_id')  # extracts the user id from the token
+            decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+            user_id = decoded_token.get('user_id')
 
-            if not user_id:  # checks if the user id is missing in the token
-                return error_response({'error': 'Token is missing user ID'}, status.HTTP_401_UNAUTHORIZED)  # sends an error response
+            if not user_id:
+                return error_response({'error': 'Token is missing user ID'}, status.HTTP_401_UNAUTHORIZED)
 
             user = User.objects.get(id=user_id)
         except Exception as e:
@@ -277,9 +278,26 @@ class FileShowView(APIView):
         if mime_type is None:
             mime_type = "application/octet-stream"
 
+        file_size = file_path.stat().st_size  # Get file size
+
         if upload.type == "csv":
-            response = HttpResponse(file_path.open("r"), content_type="text/csv")
+            with open(file_path, "r", encoding="utf-8") as file:
+                file_content = file.read(self.CHUNK_SIZE)  # Read only the first 1MB of the file
+
+            response = HttpResponse(file_content, content_type="text/csv")
             response["Content-Disposition"] = f'inline; filename="{file_path.name}"'
+            response["Content-Length"] = str(len(file_content))  # Set correct content length
+            return response
+
+        if file_size > self.CHUNK_SIZE:
+            # Read only the first CHUNK_SIZE bytes of a large file
+            with open(file_path, "rb") as file:
+                partial_content = file.read(self.CHUNK_SIZE)
+
+            response = HttpResponse(partial_content, content_type=mime_type)
+            response["Content-Disposition"] = f'inline; filename="{file_path.name}"'
+            response["Content-Length"] = str(len(partial_content))  # Indicate only part of the file is sent
+            response["X-File-Truncated"] = "true"  # Custom header to indicate truncation
             return response
 
         return FileResponse(open(file_path, "rb"), content_type=mime_type)
