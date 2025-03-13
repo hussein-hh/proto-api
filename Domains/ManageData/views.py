@@ -247,17 +247,17 @@ class FileShowView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, upload_id):
-        token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQxODU4NTg1LCJpYXQiOjE3NDE3NzIxODUsImp0aSI6ImJhNWM3NGUyYjU2NjRhNDdiZWNlYWE1MzY3MTQ2OWYxIiwidXNlcl9pZCI6N30.jDO5uKZuTGlJmxzSSOlJbaOEV5slTAvfroAOC0YeAew"
+        token = request.headers.get('Authorization')  # gets the token from the Authorization header
 
-        if not token:
-            return error_response({'error': 'Token is required in Authorization header'}, status.HTTP_401_UNAUTHORIZED)
+        if not token:  # checks if the token is missing
+            return error_response({'error': 'Token is required in Authorization header'}, status.HTTP_401_UNAUTHORIZED)  # sends an error response
 
         try:
-            decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-            user_id = decoded_token.get('user_id')
+            decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])  # decodes the token using the secret key
+            user_id = decoded_token.get('user_id')  # extracts the user id from the token
 
-            if not user_id:
-                return error_response({'error': 'Token is missing user ID'}, status.HTTP_401_UNAUTHORIZED)
+            if not user_id:  # checks if the user id is missing in the token
+                return error_response({'error': 'Token is missing user ID'}, status.HTTP_401_UNAUTHORIZED)  # sends an error response
 
             user = User.objects.get(id=user_id)
         except Exception as e:
@@ -277,7 +277,6 @@ class FileShowView(APIView):
         if mime_type is None:
             mime_type = "application/octet-stream"
 
-        # ✅ Handle CSV files correctly
         if upload.type == "csv":
             response = HttpResponse(file_path.open("r"), content_type="text/csv")
             response["Content-Disposition"] = f'inline; filename="{file_path.name}"'
