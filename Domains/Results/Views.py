@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from Domains.ManageData.models import Upload
-from Domains.Results.LLMs.agents import smmarizer
+from Domains.Results.LLMs.agents import summarizer
 from Domains.Results.Serializer import UploadSerializer  
 
 User = get_user_model()
@@ -60,7 +60,7 @@ class UserUploadsSummaryAPIView(APIView):
         csv_buffer.close()
 
         # Generate summary via the summarizer agent.
-        summary = smmarizer(csv_content)
+        summary = summarizer(csv_content)
 
         return Response({
             "user_id": user_id,
