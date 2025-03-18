@@ -13,7 +13,7 @@ temperature = 0.1
 top_p = 0.1
 max_tokens = 2000
 
-def smmarizer(csv_content):
+def summarizer(csv_content):
     """
     Sends CSV content to the LLM for summarization.
     """

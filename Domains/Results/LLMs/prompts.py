@@ -1,5 +1,5 @@
 summarizer_system_message = """
-You will recieve a csv file and your mission is to summarize it in three words.
+You will receive a CSV file and must summarize its content in 3 meaningful words. Focus on key themes.
 """
 
 def summarizer_prompt(user_upload):
