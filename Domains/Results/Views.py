@@ -4,7 +4,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from Domains.ManageData.models import Upload
-from Domains.Results.LLMs.agents import smmarizer 
+from Domains.Results.LLMs.agents import summarizer 
 from Domains.Results.Serializer import UploadSerializer  
 
 @api_view(["GET"])
@@ -33,7 +33,7 @@ def get_user_uploads_summary(request, user_id):
         csv_content = csv_buffer.getvalue()
         csv_buffer.close()
 
-        summary = smmarizer(csv_content)
+        summary = summarizer(csv_content)
 
         return Response({
             "user_id": user_id,
