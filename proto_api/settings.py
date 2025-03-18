@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'Domains.Onboard',
     'corsheaders',
     'Domains',
+    'django_extensions',
 ]
 
 MIDDLEWARE = [
