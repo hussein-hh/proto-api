@@ -15,7 +15,7 @@ max_tokens = 2000
 
 def summarizer(csv_content):
     """
-    Sends CSV content to the LLM for summarization.
+    Sends all user-uploaded CSV content to the LLM for bulk summarization.
     """
     system_message = prompts.summarizer_system_message
     prompt = prompts.summarizer_prompt(csv_content) 
@@ -33,5 +33,5 @@ def summarizer(csv_content):
         top_p=top_p
     )
 
-    case_class = completion.choices[0].message.content
-    return case_class  
+    uba_agent = completion.choices[0].message.content
+    return uba_agent
