@@ -36,7 +36,8 @@ class OnboardingAPIView(APIView):
             user=user,
             category=data["category"],
             url=data["url"],
-            name=data["name"]
+            name=data["name"],
+            role_model=data["role_model"]
         )
 
         return Response(

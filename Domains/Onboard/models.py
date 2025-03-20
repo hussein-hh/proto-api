@@ -31,6 +31,7 @@ class Business(models.Model):
     name = models.CharField(max_length=255, null=False)
     category = models.CharField(max_length=255, choices=CATEGORY_CHOICES)
     url = models.URLField(unique=True)
+    role_model = models.URLField(unique=False,null=True)
     goal = models.FileField(upload_to="business/goals/", null=True, blank=True)
 
     def __str__(self):

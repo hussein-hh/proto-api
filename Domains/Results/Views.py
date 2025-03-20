@@ -60,7 +60,7 @@ class UserUploadsSummaryAPIView(APIView):
         csv_buffer.close()
 
         # Generate summary via the summarizer agent.
-        summary = summarizer(csv_content)
+        summary = smmarizer(csv_content)
 
         return Response({
             "user_id": user_id,
