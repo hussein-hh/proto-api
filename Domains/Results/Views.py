@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from Domains.ManageData.models import Upload
-from Domains.Results.LLMs.agents import summarizer
+from Domains.Results.LLMs.agents import summarizer, webAgent
 from Domains.Results.Serializer import UploadSerializer  
 
 User = get_user_model()
@@ -47,10 +47,8 @@ class UserUploadsSummaryAPIView(APIView):
         except Upload.DoesNotExist:
             return Response({"error": "File not found or does not belong to the user."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Serialize file data.
         upload_data = UploadSerializer(upload).data
 
-        # Convert file data to CSV if applicable.
         csv_buffer = io.StringIO()
         fieldnames = ["name", "path", "type", "uploaded_at"]
         writer = csv.DictWriter(csv_buffer, fieldnames=fieldnames)
@@ -59,8 +57,7 @@ class UserUploadsSummaryAPIView(APIView):
         csv_content = csv_buffer.getvalue()
         csv_buffer.close()
 
-        # Generate summary via the summarizer agent.
-        summary = smmarizer(csv_content)
+        summary = summarizer(csv_content)
 
         return Response({
             "user_id": user_id,
@@ -68,3 +65,32 @@ class UserUploadsSummaryAPIView(APIView):
             "file_name": upload.name,
             "summary": summary
         }, status=status.HTTP_200_OK)
+
+class WebAgentAPIView(APIView):
+    """
+    API Endpoint: Accepts two JSON objects (url_metrics and shark_metrics),
+    passes them to the webAgent function, and returns the evaluation result.
+    """
+
+    def post(self, request):
+        # Extract metrics from the request payload.
+        url_metrics = request.data.get("url_metrics")
+        shark_metrics = request.data.get("shark_metrics")
+
+        if not url_metrics or not shark_metrics:
+            return Response(
+                {"error": "Both 'url_metrics' and 'shark_metrics' are required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            # Call the webAgent function with the provided metrics.
+            evaluation = webAgent(url_metrics, shark_metrics)
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred while processing the request: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        # Return the evaluation output as JSON.
+        return Response({"web_evaluation": evaluation}, status=status.HTTP_200_OK)

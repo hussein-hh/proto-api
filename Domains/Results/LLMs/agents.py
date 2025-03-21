@@ -35,3 +35,24 @@ def summarizer(csv_content):
 
     case_class = completion.choices[0].message.content
     return case_class  
+
+def webAgent(url_metrics, shark_metrics):
+
+    system_message = prompts.webAgent_system_message
+    prompt = prompts.webAgent_prompt(url_metrics, shark_metrics) 
+
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": prompt}
+    ]
+
+    completion = groq_client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        top_p=top_p
+    )
+
+    web_evaluation = completion.choices[0].message.content
+    return web_evaluation  
