@@ -41,6 +41,8 @@ INSTALLED_APPS = [
     'Domains.ManageData',
     'Domains.Onboard',
     'corsheaders',
+    'Domains',
+    'django_extensions',
 ]
 
 MIDDLEWARE = [
