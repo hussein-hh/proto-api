@@ -1,5 +1,6 @@
 import requests
 import jwt
+import concurrent.futures
 from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -10,9 +11,8 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 
 def get_web_performance(url):
-    api_key = "AIzaSyBbuppk5bZg9Js9exxJxchuaOQ5XdT5hR8" 
+    api_key = "AIzaSyBbuppk5bZg9Js9exxJxchuaOQ5XdT5hR8"
     api_url = f"https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={url}&strategy=mobile&key={api_key}"
-
     response = requests.get(api_url)
     data = response.json()
 
@@ -28,7 +28,6 @@ def get_web_performance(url):
     return metrics
 
 class WebMetricsAPIView(APIView):
-
     def get(self, request, format=None):
         # Extract JWT from Authorization Header
         auth_header = request.headers.get('Authorization')
@@ -58,15 +57,24 @@ class WebMetricsAPIView(APIView):
             return Response({"error": "Business not found for the authenticated user."}, status=status.HTTP_404_NOT_FOUND)
 
         results = {}
+        # Use ThreadPoolExecutor to execute both API requests concurrently
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future_url_metrics = None
+            future_role_model_metrics = None
 
-        if business.url:
-            results["url_metrics"] = get_web_performance(business.url)
-        else:
-            results["url_metrics"] = "No business URL provided."
+            if business.url:
+                future_url_metrics = executor.submit(get_web_performance, business.url)
+            else:
+                results["url_metrics"] = "No business URL provided."
 
-        if business.role_model:
-            results["role_model_metrics"] = get_web_performance(business.role_model)
-        else:
-            results["role_model_metrics"] = "No role model URL provided."
+            if business.role_model:
+                future_role_model_metrics = executor.submit(get_web_performance, business.role_model)
+            else:
+                results["role_model_metrics"] = "No role model URL provided."
+
+            if future_url_metrics is not None:
+                results["url_metrics"] = future_url_metrics.result()
+            if future_role_model_metrics is not None:
+                results["role_model_metrics"] = future_role_model_metrics.result()
 
         return Response(results, status=status.HTTP_200_OK)
