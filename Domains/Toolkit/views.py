@@ -7,11 +7,21 @@ from rest_framework.response import Response
 from rest_framework import status
 from Domains.Onboard.models import Business
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
+
 
 User = get_user_model()
 
 def get_web_performance(url):
-    api_key = "AIzaSyBbuppk5bZg9Js9exxJxchuaOQ5XdT5hR8"
+
+    cache_key = f"web_metrics_{url}"
+    cached_data = cache.get(cache_key)
+
+    if cached_data:
+        return cached_data
+    
+    api_key = settings.PAGESPEED_API_KEY
+    
     api_url = f"https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={url}&strategy=mobile&key={api_key}"
     response = requests.get(api_url)
     data = response.json()
@@ -25,6 +35,9 @@ def get_web_performance(url):
         "Total Blocking Time (TBT)": data["lighthouseResult"]["audits"]["total-blocking-time"]["displayValue"],
         "Cumulative Layout Shift (CLS)": data["lighthouseResult"]["audits"]["cumulative-layout-shift"]["displayValue"]
     }
+
+    cache.set(cache_key, metrics, timeout=60 * 60)
+
     return metrics
 
 class WebMetricsAPIView(APIView):

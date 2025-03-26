@@ -149,3 +149,11 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+PAGESPEED_API_KEY = "AIzaSyBbuppk5bZg9Js9exxJxchuaOQ5XdT5hR8"
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",  # For dev
+        "LOCATION": "unique-snowflake",
+    }
+}
