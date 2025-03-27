@@ -12,6 +12,7 @@ from .models import Upload  # imports the upload model to save file info in the 
 from Domains.Onboard.models import Business  # imports the business model to link users with businesses
 from django.http import HttpResponse, FileResponse
 import mimetypes
+from django.core.cache import cache
 
 
 def slugify(text):
@@ -82,6 +83,8 @@ class FileUploadView(APIView):  # defines an api endpoint for file uploads
             uploaded_by=user,  # stores the user who uploaded it
             name=new_filename  # stores the new unique file name
         )
+        cache.delete(f"summarizer_output_user_{user.id}")
+
 
         serializer = UploadSerializer(uploaded_file_record)  # formats the uploaded file data
         return error_response(serializer.data, status.HTTP_201_CREATED)  # returns the uploaded file info as a response
@@ -176,6 +179,8 @@ class FileUpdateView(APIView):  # defines an api endpoint for updating an upload
         upload.type = file_type  # updates the file type in the upload record
         upload.name = new_filename  # updates the file name in the upload record
         upload.save()  # saves the updated upload record in the database
+        cache.delete(f"summarizer_output_user_{user.id}")
+
 
         serializer = UploadSerializer(upload)  # formats the updated file data
         return Response(serializer.data, status=status.HTTP_200_OK)  # returns the updated file info as a response
@@ -211,6 +216,8 @@ class FileDeleteView(APIView):  # defines an api endpoint for deleting an upload
             file_path.unlink()  # removes the file from storage
 
         upload.delete()  # deletes the upload record from the database
+        
+        cache.delete(f"summarizer_output_user_{user.id}")
 
         return Response({'message': 'File deleted successfully'}, status=status.HTTP_204_NO_CONTENT)  # returns a success message
 

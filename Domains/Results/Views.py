@@ -58,7 +58,7 @@ class UserUploadsSummaryAPIView(APIView):
         csv_buffer.close()
 
         # Generate summary
-        summary = summarizer(csv_content)
+        summary = summarizer(user_id, csv_content)
 
         return Response({
             "user_id": user_id,

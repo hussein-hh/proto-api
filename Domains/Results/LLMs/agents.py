@@ -2,6 +2,7 @@ from groq import Groq
 import os
 from dotenv import load_dotenv, find_dotenv
 import Domains.Results.LLMs.prompts as prompts  
+from django.core.cache import cache
 
 _ = load_dotenv(find_dotenv())
 
@@ -13,10 +14,19 @@ temperature = 0.1
 top_p = 0.1
 max_tokens = 2000
 
-def summarizer(csv_content):
+def summarizer(user_id, csv_content):
     """
     Sends all user-uploaded CSV content to the LLM for bulk summarization.
+    Uses cached summary per user, regenerates only when cache is invalidated.
     """
+
+    cache_key = f"summarizer_output_user_{user_id}"
+    cached_summary = cache.get(cache_key)
+
+    if cached_summary: 
+        return cached_summary
+    
+    # If not cached, run summarization
     system_message = prompts.summarizer_system_message
     prompt = prompts.summarizer_prompt(csv_content) 
 
@@ -34,6 +44,9 @@ def summarizer(csv_content):
     )
 
     uba_agent = completion.choices[0].message.content
+
+    cache.set(cache_key, uba_agent)
+
     return uba_agent 
 
 def webAgent(url_metrics, shark_metrics):
