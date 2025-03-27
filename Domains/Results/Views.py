@@ -12,7 +12,7 @@ from Domains.Results.Serializer import UploadSerializer
 
 User = get_user_model()
 
-class UserUploadsSummaryAPIView(APIView):
+class JobsAgent(APIView):
     """
     API Endpoint: Retrieves all uploaded files for the authenticated user,
     converts them to CSV (if applicable), and summarizes key themes.
@@ -65,7 +65,7 @@ class UserUploadsSummaryAPIView(APIView):
             "summary": summary
         }, status=status.HTTP_200_OK)
 
-class WebAgentAPIView(APIView):
+class ZahraAgent(APIView):
     """
     API Endpoint: Accepts two JSON objects (url_metrics and shark_metrics),
     passes them to the webAgent function, and returns the evaluation result.
