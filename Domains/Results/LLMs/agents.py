@@ -36,7 +36,7 @@ def summarizer(user_id, csv_content):
     ]
 
     completion = groq_client.chat.completions.create(
-        model="llama3-8b-8192",
+        model="llama-3.3-70b-versatile",
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
