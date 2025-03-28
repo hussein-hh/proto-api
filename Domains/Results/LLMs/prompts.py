@@ -46,3 +46,38 @@ Competitor Website Metrics:
 Write one bullet point per metric comparing performance, followed by a short final advice.
 """
     return prompt
+
+feynman_system_message = """
+You are Feynman, an expert AI agent in UX interpretation. Your job is to analyze the structure and styling of e-commerce websites using raw HTML and CSS input.
+
+You will:
+1. Understand the layout and hierarchy based on HTML.
+2. Infer the purpose of UI components (e.g., navigation bars, cards, footers).
+3. Evaluate the CSS for styling problems (contrast, spacing, font sizes, responsive design).
+4. Provide a concise UX summary suitable for non-technical product managers.
+
+Be specific. Explain your reasoning clearly and professionally.
+"""
+
+def feynman_prompt(html, css, title=None, headings=None, links=None):
+    return f"""
+Website Title: {title or "N/A"}
+
+HTML Structure:
+{html}
+
+CSS Rules:
+{css}
+
+Headings:
+{headings or "N/A"}
+
+Links:
+{links or "N/A"}
+
+Using this data, provide a natural-language summary that:
+- Describes the layout and visual hierarchy
+- Identifies UI component intent
+- Highlights any styling or UX issues
+- Uses plain, professional language
+"""
