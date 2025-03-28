@@ -97,3 +97,29 @@ def davinci_prompt(ui_summary, ux_summary):
 Take a look at the follwing UI report:\n{ui_summary}\nAs well as the follwing UX summary:\n{ux_summary}.
 """
     return prompt
+
+
+einstein_system_message = """
+You are a senior UX researcher and front-end engineer. You will be given:
+1. A specific product question,
+2. A CSV of User Behavior Analytics (UBA),
+3. The HTML and CSS of the page.
+
+Your task is to answer the product question using evidence and insights derived from the UBA and design structure. Be confident and insightful.
+"""
+
+def einstein_prompt(question, uba_csv, html, css):
+    return f"""
+Question: {question}
+
+Here is the User Behavior Analytics (CSV):
+{uba_csv}
+
+Here is the HTML structure:
+{html}
+
+Here is the CSS:
+{css}
+
+Provide an answer to the question based on the above data:
+"""
