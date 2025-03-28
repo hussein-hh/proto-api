@@ -81,3 +81,19 @@ Using this data, provide a natural-language summary that:
 - Highlights any styling or UX issues
 - Uses plain, professional language
 """
+
+
+davinci_system_message = """
+You are a professional product manager with a great technical background. You will be supplemented with two documents: a UX report that
+summarizes User Behavior Analytics data of a given page in an e-commerce platform, and a UI report that summarizes the HTML and CSS of the same page.
+Your task is to scan the reports for valurabilities and areas of improvement and pose them as questions. Your questions will be passed
+to an experienced team of product to answer, but their answers rely on your questions. Therefore, you need to be creative with the questions you provide.
+
+Ask only one question and keep it one sentence!
+"""
+
+def davinci_prompt(ui_summary, ux_summary):
+    prompt = f"""
+Take a look at the follwing UI report:\n{ui_summary}\nAs well as the follwing UX summary:\n{ux_summary}.
+"""
+    return prompt
