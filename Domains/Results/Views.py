@@ -14,58 +14,39 @@ from Domains.Results.Serializer import UploadSerializer
 
 User = get_user_model()
 
-class JobsAgent(APIView):
+class JobsAgentAPIView(APIView):
     """
-    API Endpoint: Retrieves all uploaded files for the authenticated user,
-    converts them to CSV (if applicable), and summarizes key themes.
+    API Endpoint: Accepts a CSV file of user-behavior analytics,
+    passes it to the summarizer agent, and returns a UX summary.
     """
 
-    def get(self, request):
-        # Extract token from Authorization header
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return Response({'error': 'Authorization header is required.'}, status=status.HTTP_401_UNAUTHORIZED)
+    def post(self, request):
+        csv_file = request.FILES.get("file")
 
-        parts = auth_header.split()
-        if len(parts) != 2 or parts[0].lower() != 'bearer':
-            return Response({'error': 'Authorization header must be in the format: Bearer <token>'}, status=status.HTTP_401_UNAUTHORIZED)
+        if not csv_file:
+            return Response(
+                {"error": "A CSV file is required in the 'file' field."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        token = parts[1]
-
-        # Decode JWT token
         try:
-            decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-            user_id = decoded_token.get('user_id')
-            if not user_id:
-                return Response({'error': 'Token is missing user ID.'}, status=status.HTTP_401_UNAUTHORIZED)
-            user = User.objects.get(id=user_id)
+            csv_text = csv_file.read().decode("utf-8")
         except Exception as e:
-            return Response({'error': f'Invalid or expired token: {str(e)}'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response(
+                {"error": f"Failed to read CSV file: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        # Retrieve all files uploaded by the user
-        uploads = Upload.objects.filter(uploaded_by=user)
-        if not uploads.exists():
-            return Response({"error": "No files found for this user."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            summary = summarizer(user_id=None, csv_content=csv_text)
+        except Exception as e:
+            return Response(
+                {"error": f"Error while generating summary: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
-        # Convert file data to CSV format
-        csv_buffer = io.StringIO()
-        fieldnames = ["name", "path", "type", "uploaded_at"]
-        writer = csv.DictWriter(csv_buffer, fieldnames=fieldnames)
-        writer.writeheader()
+        return Response({"ux_summary": summary}, status=status.HTTP_200_OK)
 
-        for upload in uploads:
-            writer.writerow(UploadSerializer(upload).data)
-        
-        csv_content = csv_buffer.getvalue()
-        csv_buffer.close()
-
-        # Generate summary
-        summary = summarizer(user_id, csv_content)
-
-        return Response({
-            "user_id": user_id,
-            "summary": summary
-        }, status=status.HTTP_200_OK)
 
 class ZahraAgent(APIView):
     """
