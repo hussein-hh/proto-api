@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from Domains.ManageData.models import Upload
-from Domains.Results.LLMs.agents import summarizer, webAgent, feynmanAgent, davinciAgent, einsteinAgent
+from Domains.Results.LLMs.agents import summarizer, webAgent, feynmanAgent, davinciAgent, einsteinAgent, husseinAgent
 from Domains.Results.Serializer import UploadSerializer 
  
 
@@ -180,3 +180,30 @@ class EinsteinAgentAPIView(APIView):
             )
 
         return Response({"einstein_answer": answer}, status=status.HTTP_200_OK)
+
+
+
+class HusseinAgentAPIView(APIView):
+    """
+    API Endpoint: Accepts a product question and its expert answer, then returns a simplified insight.
+    """
+
+    def post(self, request):
+        question = request.data.get("question")
+        answer = request.data.get("answer")
+
+        if not question or not answer:
+            return Response(
+                {"error": "'question' and 'answer' fields are required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            summary = husseinAgent(question, answer)
+        except Exception as e:
+            return Response(
+                {"error": f"Error while summarizing insight: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        return Response({"user_friendly_summary": summary}, status=status.HTTP_200_OK)

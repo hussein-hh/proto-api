@@ -135,3 +135,26 @@ def einsteinAgent(question, uba_csv, html, css):
     )
 
     return completion.choices[0].message.content
+
+
+def husseinAgent(question, answer):
+    """
+    Summarizes the question-answer pair into a user-friendly product insight.
+    """
+    system_message = prompts.hussein_system_message
+    prompt = prompts.hussein_prompt(question, answer)
+
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": prompt}
+    ]
+
+    completion = groq_client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        top_p=top_p
+    )
+
+    return completion.choices[0].message.content
