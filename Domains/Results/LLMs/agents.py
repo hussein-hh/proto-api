@@ -110,3 +110,28 @@ def davinciAgent(ui_summary, ux_summary):
     )
 
     return completion.choices[0].message.content
+
+def einsteinAgent(question, uba_csv, html, css):
+    """
+    Answers a UX/UI product question using actual data:
+    - question: a single product/design question (from Davinci)
+    - uba_csv: CSV of user-behavior analytics
+    - html/css: Raw HTML & CSS of the target page
+    """
+    system_message = prompts.einstein_system_message
+    prompt = prompts.einstein_prompt(question, uba_csv, html, css)
+
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": prompt}
+    ]
+
+    completion = groq_client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        top_p=top_p
+    )
+
+    return completion.choices[0].message.content

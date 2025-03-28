@@ -7,8 +7,9 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from Domains.ManageData.models import Upload
-from Domains.Results.LLMs.agents import summarizer, webAgent, feynmanAgent, davinciAgent
-from Domains.Results.Serializer import UploadSerializer  
+from Domains.Results.LLMs.agents import summarizer, webAgent, feynmanAgent, davinciAgent, einsteinAgent
+from Domains.Results.Serializer import UploadSerializer 
+ 
 
 
 User = get_user_model()
@@ -152,3 +153,30 @@ class DavinciAgentAPIView(APIView):
             )
 
         return Response({"questions": questions}, status=status.HTTP_200_OK)
+    
+class EinsteinAgentAPIView(APIView):
+    """
+    API Endpoint: Accepts a question, uba_csv, html, and css, and returns an answer.
+    """
+
+    def post(self, request):
+        question = request.data.get("question")
+        uba_csv = request.data.get("uba_csv")
+        html = request.data.get("html")
+        css = request.data.get("css")
+
+        if not all([question, uba_csv, html, css]):
+            return Response(
+                {"error": "All of 'question', 'uba_csv', 'html', and 'css' are required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            answer = einsteinAgent(question, uba_csv, html, css)
+        except Exception as e:
+            return Response(
+                {"error": f"Error while generating answer: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        return Response({"einstein_answer": answer}, status=status.HTTP_200_OK)
