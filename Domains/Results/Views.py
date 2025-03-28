@@ -9,6 +9,7 @@ from rest_framework import status
 from Domains.ManageData.models import Upload
 from Domains.Results.LLMs.agents import summarizer, webAgent
 from Domains.Results.Serializer import UploadSerializer  
+from Domains.Results.LLMs.agents import feynmanAgent 
 
 User = get_user_model()
 
@@ -93,3 +94,34 @@ class WebAgentAPIView(APIView):
 
         # Return the evaluation output as JSON.
         return Response({"web_evaluation": evaluation}, status=status.HTTP_200_OK)
+    
+    from rest_framework.views import APIView
+
+class FeynmanAgentAPIView(APIView):
+    """
+    API Endpoint: Accepts raw HTML and CSS input (with optional metadata like title, headings, links),
+    analyzes them using the Feynman agent, and returns a UX interpretation summary.
+    """
+
+    def post(self, request):
+        html = request.data.get("html")
+        css = request.data.get("css")
+        title = request.data.get("title")
+        headings = request.data.get("headings")
+        links = request.data.get("links")
+
+        if not html or not css:
+            return Response(
+                {"error": "Both 'html' and 'css' fields are required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            summary = feynmanAgent(html=html, css=css, title=title, headings=headings, links=links)
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred while analyzing the UI: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        return Response({"feynman_summary": summary}, status=status.HTTP_200_OK)
