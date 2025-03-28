@@ -69,3 +69,22 @@ def webAgent(url_metrics, shark_metrics):
 
     web_evaluation = completion.choices[0].message.content
     return web_evaluation  
+
+def feynmanAgent(html, css, title=None, headings=None, links=None):
+    system_message = prompts.feynman_system_message
+    prompt = prompts.feynman_prompt(html, css, title, headings, links)
+
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": prompt}
+    ]
+
+    completion = groq_client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        top_p=top_p
+    )
+
+    return completion.choices[0].message.content
