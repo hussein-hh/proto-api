@@ -18,9 +18,9 @@ class RoleModel(models.Model):
 
     name = models.CharField(max_length=255)
     category = models.CharField(max_length=255, choices=CATEGORY_CHOICES)
-    landing_page = models.URLField(null=True, blank=True)
-    results_page = models.URLField(null=True, blank=True)
-    product_page = models.URLField(null=True, blank=True)
+    landing_page = models.URLField(null=True, blank=True, max_length=1000)
+    results_page = models.URLField(null=True, blank=True, max_length=1000)
+    product_page = models.URLField(null=True, blank=True, max_length=1000)
 
     def __str__(self):
         return self.name
