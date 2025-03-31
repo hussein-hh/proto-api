@@ -12,7 +12,7 @@ groq_client = Groq(
 
 temperature = 0.1
 top_p = 0.1
-max_tokens = 2000
+max_tokens = 10000
 
 def summarizer(user_id, csv_content):
     """
@@ -60,7 +60,7 @@ def webAgent(url_metrics, shark_metrics):
     ]
 
     completion = groq_client.chat.completions.create(
-        model="llama3-8b-8192",
+        model="llama-3.3-70b-versatile",
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
@@ -80,7 +80,7 @@ def feynmanAgent(html, css, title=None, headings=None, links=None):
     ]
 
     completion = groq_client.chat.completions.create(
-        model="llama3-8b-8192",
+        model="llama-3.3-70b-versatile",
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
@@ -102,7 +102,7 @@ def davinciAgent(ui_summary, ux_summary):
     ]
 
     completion = groq_client.chat.completions.create(
-        model="llama3-8b-8192",
+        model="llama-3.3-70b-versatile",
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
@@ -127,7 +127,7 @@ def einsteinAgent(question, uba_csv, html, css):
     ]
 
     completion = groq_client.chat.completions.create(
-        model="llama3-8b-8192",
+        model="llama-3.3-70b-versatile",
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
@@ -150,7 +150,7 @@ def husseinAgent(question, answer):
     ]
 
     completion = groq_client.chat.completions.create(
-        model="llama3-8b-8192",
+        model="llama-3.3-70b-versatile",
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,

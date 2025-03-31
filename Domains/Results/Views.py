@@ -9,7 +9,8 @@ from rest_framework import status
 from Domains.ManageData.models import Upload
 from Domains.Results.LLMs.agents import summarizer, webAgent, feynmanAgent, davinciAgent, einsteinAgent, husseinAgent
 from Domains.Results.Serializer import UploadSerializer 
- 
+import requests
+import os
 
 
 User = get_user_model()
@@ -188,3 +189,133 @@ class HusseinAgentAPIView(APIView):
             )
 
         return Response({"user_friendly_summary": summary}, status=status.HTTP_200_OK)
+
+
+#######################################################################################
+
+class UltraAgentAPIView(APIView):
+    """
+    Chain together all agents behind a single endpoint.
+    """
+
+    def get(self, request):
+        # 1) Require & parse JWT
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return Response({"error": "Missing Authorization header."},
+                            status=status.HTTP_401_UNAUTHORIZED)
+        
+        parts = auth_header.split()
+        if len(parts) != 2 or parts[0].lower() != 'bearer':
+            return Response({"error": "Invalid Authorization header format. Must be: Bearer <token>"},
+                            status=status.HTTP_401_UNAUTHORIZED)
+
+        token = parts[1]
+
+        try:
+            decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+            user_id = decoded_token.get('user_id')
+            if not user_id:
+                return Response({"error": "Token missing user_id."}, 
+                                status=status.HTTP_401_UNAUTHORIZED)
+            user = User.objects.get(pk=user_id)
+        except Exception as e:
+            return Response({"error": f"JWT Error: {str(e)}"},
+                            status=status.HTTP_401_UNAUTHORIZED)
+
+        # 2) Retrieve CSV file from DB, decode it into text
+        upload = Upload.objects.filter(uploaded_by=user).first()
+        if not upload:
+            return Response({"error": "No uploaded CSV found for this user."},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        # Assuming `upload.file` is a FileField or similar
+        upload = Upload.objects.filter(uploaded_by=user).first()
+        if not upload:
+            return Response({"error": "No uploaded CSV found for this user."},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        # Use the path from the model
+        file_path = upload.path
+
+        # If the path is relative, combine with MEDIA_ROOT, e.g.:
+        # file_path = os.path.join(settings.MEDIA_ROOT, upload.path)
+
+        # Now read the file from disk
+        try:
+            with open(file_path, mode='r', encoding='utf-8', errors='ignore') as f:
+                uba = f.read()  # CSV content as a string
+        except Exception as e:
+            return Response({"error": f"Error reading CSV file: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 3) Fetch HTML from local endpoint (requires Bearer JWT)
+        business_html_url = "http://127.0.0.1:8000/toolkit/business-html/"
+        try:
+            html_response = requests.get(
+                business_html_url,
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            html_response.raise_for_status()
+            html = html_response.text  # If that endpoint returns plain text
+        except Exception as e:
+            return Response({"error": f"Error retrieving business HTML: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 4) Fetch CSS from local endpoint (requires Bearer JWT)
+        business_css_url = "http://127.0.0.1:8000/toolkit/business-css/"
+        try:
+            css_response = requests.get(
+                business_css_url,
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            css_response.raise_for_status()
+            css = css_response.text
+        except Exception as e:
+            return Response({"error": f"Error retrieving business CSS: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 5) Call Feynman agent (UI analysis)
+        try:
+            ui_report = feynmanAgent(html=html, css=css, title=None, headings=None, links=None)
+        except Exception as e:
+            return Response({"error": f"Feynman agent failed: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 6) Call 'Jobs' logic (UX analysis) by reusing summarizer(user_id, uba)
+        try:
+            ux_report = summarizer(user_id, uba)
+        except Exception as e:
+            return Response({"error": f"Jobs summarizer failed: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 7) Call Davinci agent (generate question)
+        try:
+            question = davinciAgent(ui_report, ux_report)
+        except Exception as e:
+            return Response({"error": f"Davinci agent failed: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 8) Call Einstein agent (answer question w/ actual data)
+        try:
+            answer = einsteinAgent(question, uba, html, css)
+        except Exception as e:
+            return Response({"error": f"Einstein agent failed: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 9) Call Hussein agent (user-friendly summary)
+        try:
+            output = husseinAgent(question, answer)
+        except Exception as e:
+            return Response({"error": f"Hussein agent failed: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 10) Return or print results in your desired format
+        # We'll return JSON containing all agent outputs for clarity:
+        return Response({
+            "feynman_output": ui_report,
+            "jobs_output": ux_report,
+            "davinci_output": question,
+            "einstein_output": answer,
+            "hussein_output": output
+        }, status=status.HTTP_200_OK)
