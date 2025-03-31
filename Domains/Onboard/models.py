@@ -1,38 +1,60 @@
 from django.db import models
 from django.contrib.auth import get_user_model
-import os
-import uuid
 
-class Business(models.Model):
+User = get_user_model()
+
+class RoleModel(models.Model):
     CATEGORY_CHOICES = [
-        ("Online Retail", "Online Retail (General E-commerce)"),
+        ("Online Retail & Marketplace", "Online Retail & Marketplace"),
         ("Fashion & Apparel", "Fashion & Apparel"),
         ("Cosmetics & Beauty", "Cosmetics & Beauty"),
         ("Electronics & Gadgets", "Electronics & Gadgets"),
-        ("Home & Furniture", "Home & Furniture"),
         ("Food & Grocery", "Food & Grocery"),
-        ("Health & Wellness", "Health & Wellness"),
-        ("Luxury Goods", "Luxury Goods"),
-        ("Automotive & Auto Parts", "Automotive & Auto Parts"),
-        ("Books & Stationery", "Books & Stationery"),
-        ("Sports & Outdoor Gear", "Sports & Outdoor Gear"),
         ("Toys & Baby Products", "Toys & Baby Products"),
-        ("Pet Supplies", "Pet Supplies"),
-        ("Subscription Services", "Subscription Services"),
-        ("Digital Products & Services", "Digital Products & Services"),
-        ("Event Ticketing", "Event Ticketing"),
         ("Furniture & Home Decor", "Furniture & Home Decor"),
         ("Jewelry & Accessories", "Jewelry & Accessories"),
-        ("Pharmaceutical & Medical Supplies", "Pharmaceutical & Medical Supplies"),
-        ("Fast Fashion & Budget Shopping", "Fast Fashion & Budget Shopping"),
+        ("Luxury Goods", "Luxury Goods"),
     ]
+
+    name = models.CharField(max_length=255)
+    category = models.CharField(max_length=255, choices=CATEGORY_CHOICES)
+    landing_page = models.URLField(null=True, blank=True, max_length=1000)
+    results_page = models.URLField(null=True, blank=True, max_length=1000)
+    product_page = models.URLField(null=True, blank=True, max_length=1000)
+
+    def __str__(self):
+        return self.name
+
+
+class Business(models.Model):
+    CATEGORY_CHOICES = RoleModel.CATEGORY_CHOICES  
+
     id = models.AutoField(primary_key=True)
     user = models.OneToOneField(get_user_model(), on_delete=models.CASCADE)
     name = models.CharField(max_length=255, null=False)
     category = models.CharField(max_length=255, choices=CATEGORY_CHOICES)
-    url = models.URLField(unique=True)
-    role_model = models.URLField(unique=False,null=True)
-    goal = models.FileField(upload_to="business/goals/", null=True, blank=True)
+    role_model = models.ForeignKey("RoleModel", null=True, blank=True, on_delete=models.SET_NULL)
 
     def __str__(self):
         return self.name
+    
+class Page(models.Model):
+    PAGE_TYPE_CHOICES = [
+        ("Landing Page", "Landing Page"),
+        ("Search Results Page", "Search Results Page"),
+        ("Product Page", "Product Page"),
+    ]
+    FILE_TYPES = (
+        ('txt', 'Text File'),
+        ('csv', 'CSV'),
+        ('pdf', 'PDF'),
+        ('jpg', 'JPG'),
+    )
+
+    url = models.URLField(null=True, blank=True)
+    page_type = models.CharField(max_length=50, choices=PAGE_TYPE_CHOICES, default="Landing Page")
+    business = models.ForeignKey("Business", null=True, blank=True, on_delete=models.SET_NULL)
+
+
+    def __str__(self):
+        return f"{self.page_type} - {self.upload.name} by {self.user.username}"
