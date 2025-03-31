@@ -26,14 +26,10 @@ class LoginView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
-            email = serializer.validated_data['email']
-            password = serializer.validated_data['password']
-
-            try:
-                user_obj = user.objects.get(email=email)
-                user = authenticate(username=user_obj.username, password=password)
-            except user.DoesNotExist:
-                user = None
+            user = authenticate(
+                username=serializer.validated_data['username'],
+                password=serializer.validated_data['password']
+            )
 
             if user:
                 first_login = user.last_login is None
@@ -49,3 +45,4 @@ class LoginView(APIView):
 
             return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
