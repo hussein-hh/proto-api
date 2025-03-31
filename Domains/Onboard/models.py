@@ -51,35 +51,10 @@ class Page(models.Model):
         ('jpg', 'JPG'),
     )
 
-    path = models.CharField(max_length=255)
-    type = models.CharField(max_length=10, choices=FILE_TYPES)
-    uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE)
-    uploaded_at = models.DateTimeField(auto_now_add=True)
-    name = models.CharField(max_length=255)
+    url = models.URLField(null=True, blank=True)
+    page_type = models.CharField(max_length=50, choices=PAGE_TYPE_CHOICES, default="Landing Page")
+    business = models.ForeignKey("Business", null=True, blank=True, on_delete=models.SET_NULL)
+
 
     def __str__(self):
         return f"{self.page_type} - {self.upload.name} by {self.user.username}"
-
-class Page(models.Model):
-    PAGE_TYPE_CHOICES = [
-        ("Landing Page", "Landing Page"),
-        ("Search Results Page", "Search Results Page"),
-        ("Product Page", "Product Page"),
-    ]
-
-    FILE_TYPES = (
-        ('txt', 'Text File'),
-        ('csv', 'CSV'),
-        ('pdf', 'PDF'),
-        ('jpg', 'JPG'),
-    )
-
-    name = models.CharField(max_length=255, default="Unnamed File")
-    path = models.CharField(max_length=255, default="/default/path/to/file")
-    type = models.CharField(max_length=10, choices=FILE_TYPES, default='pdf')
-    uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE)
-    uploaded_at = models.DateTimeField(auto_now_add=True, null=True)
-    page_type = models.CharField(max_length=50, choices=PAGE_TYPE_CHOICES, default="Landing Page")
-
-    def __str__(self):
-        return f"{self.page_type} - {self.name} by {self.uploaded_by.username}"
