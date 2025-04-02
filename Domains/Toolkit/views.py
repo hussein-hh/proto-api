@@ -9,6 +9,7 @@ from rest_framework import status
 from Domains.Onboard.models import Business, Page
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from rest_framework.permissions import IsAuthenticated
 
 User = get_user_model()
 
@@ -316,3 +317,39 @@ class PageCSSAPIView(APIView):
         except Exception as e:
             return Response({"error": f"Could not retrieve CSS from {page.url}: {str(e)}"},
                             status=status.HTTP_400_BAD_REQUEST)
+        
+
+def get_user_from_token(token):
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        user_id = payload.get("user_id")
+        user = User.objects.get(id=user_id)
+        return user, None
+    except jwt.ExpiredSignatureError:
+        return None, "Token has expired"
+    except jwt.InvalidTokenError:
+        return None, "Invalid token"
+    except User.DoesNotExist:
+        return None, "User not found"
+    
+
+class UserPagesView(APIView):
+    def post(self, request):
+        token = request.data.get("token")
+        if not token:
+            return Response({"error": "Token is required"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        user, error = get_user_from_token(token)
+        if error:
+            return Response({"error": error}, status=status.HTTP_401_UNAUTHORIZED)
+
+        pages = Page.objects.filter(user=user)
+        data = [
+            {
+                "id": page.id,
+                "type": page.page_type,
+                "url": page.url,
+            }
+            for page in pages
+        ]
+        return Response(data)

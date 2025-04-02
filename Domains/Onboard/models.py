@@ -52,6 +52,7 @@ class Page(models.Model):
     url = models.URLField(null=True, blank=True)
     page_type = models.CharField(max_length=50, choices=PAGE_TYPE_CHOICES, default="Landing Page")
     business = models.ForeignKey("Business", null=True, blank=True, on_delete=models.SET_NULL)
+    user = models.ForeignKey(get_user_model(), null=True, blank=True, on_delete=models.SET_NULL)
 
 
     def __str__(self):
