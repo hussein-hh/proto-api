@@ -6,242 +6,185 @@ from django.contrib.auth import get_user_model
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from Domains.ManageData.models import Upload
+from Domains.ManageData.models import Upload, Page
 from Domains.Results.LLMs.agents import summarizer, webAgent, feynmanAgent, davinciAgent, einsteinAgent, husseinAgent
 from Domains.Results.Serializer import UploadSerializer 
 import requests
 import os
+from bs4 import BeautifulSoup
 
 
 User = get_user_model()
 
+# -----------------------------
+# 1. Jobs Agent Endpoint
+# -----------------------------
 class JobsAgentAPIView(APIView):
     """
     API Endpoint: Accepts a CSV file of user-behavior analytics,
     passes it to the summarizer agent, and returns a UX summary.
     """
-
     def post(self, request):
         csv_file = request.FILES.get("file")
-
         if not csv_file:
-            return Response(
-                {"error": "A CSV file is required in the 'file' field."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "A CSV file is required in the 'file' field."},
+                            status=status.HTTP_400_BAD_REQUEST)
         try:
             csv_text = csv_file.read().decode("utf-8")
         except Exception as e:
-            return Response(
-                {"error": f"Failed to read CSV file: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": f"Failed to read CSV file: {str(e)}"},
+                            status=status.HTTP_400_BAD_REQUEST)
         try:
             summary = summarizer(user_id=None, csv_content=csv_text)
         except Exception as e:
-            return Response(
-                {"error": f"Error while generating summary: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
+            return Response({"error": f"Error while generating summary: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response({"ux_summary": summary}, status=status.HTTP_200_OK)
 
-
+# -----------------------------
+# 2. Zahra Agent Endpoint
+# -----------------------------
 class ZahraAgent(APIView):
     """
     API Endpoint: Accepts two JSON objects (url_metrics and shark_metrics),
     passes them to the webAgent function, and returns the evaluation result.
     """
-
     def post(self, request):
-        # Extract metrics from the request payload.
         url_metrics = request.data.get("url_metrics")
         shark_metrics = request.data.get("shark_metrics")
-
         if not url_metrics or not shark_metrics:
-            return Response(
-                {"error": "Both 'url_metrics' and 'shark_metrics' are required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "Both 'url_metrics' and 'shark_metrics' are required."},
+                            status=status.HTTP_400_BAD_REQUEST)
         try:
-            # Call the webAgent function with the provided metrics.
             evaluation = webAgent(url_metrics, shark_metrics)
         except Exception as e:
-            return Response(
-                {"error": f"An error occurred while processing the request: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-        # Return the evaluation output as JSON.
+            return Response({"error": f"An error occurred while processing the request: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response({"web_evaluation": evaluation}, status=status.HTTP_200_OK)
-    
-    from rest_framework.views import APIView
 
+# -----------------------------
+# 3. Feynman Agent Endpoint
+# -----------------------------
 class FeynmanAgentAPIView(APIView):
     """
     API Endpoint: Accepts raw HTML and CSS input (with optional metadata like title, headings, links),
     analyzes them using the Feynman agent, and returns a UX interpretation summary.
     """
-
     def post(self, request):
         html = request.data.get("html")
         css = request.data.get("css")
         title = request.data.get("title")
         headings = request.data.get("headings")
         links = request.data.get("links")
-
         if not html or not css:
-            return Response(
-                {"error": "Both 'html' and 'css' fields are required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "Both 'html' and 'css' fields are required."},
+                            status=status.HTTP_400_BAD_REQUEST)
         try:
             summary = feynmanAgent(html=html, css=css, title=title, headings=headings, links=links)
         except Exception as e:
-            return Response(
-                {"error": f"An error occurred while analyzing the UI: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
+            return Response({"error": f"An error occurred while analyzing the UI: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response({"feynman_summary": summary}, status=status.HTTP_200_OK)
-    
 
+# -----------------------------
+# 4. Davinci Agent Endpoint
+# -----------------------------
 class DavinciAgentAPIView(APIView):
     """
     API Endpoint: Accepts UI summary (from Feynman agent) and UX summary (from Jobs agent),
     and returns a list of questions generated by the Davinci agent.
     """
-
     def post(self, request):
         ui_summary = request.data.get("ui_summary")
         ux_summary = request.data.get("ux_summary")
-
         if not ui_summary or not ux_summary:
-            return Response(
-                {"error": "Both 'ui_summary' and 'ux_summary' are required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "Both 'ui_summary' and 'ux_summary' are required."},
+                            status=status.HTTP_400_BAD_REQUEST)
         try:
             questions = davinciAgent(ui_summary, ux_summary)
         except Exception as e:
-            return Response(
-                {"error": f"An error occurred while generating questions: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
+            return Response({"error": f"An error occurred while generating questions: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response({"questions": questions}, status=status.HTTP_200_OK)
-    
+
+# -----------------------------
+# 5. Einstein Agent Endpoint
+# -----------------------------
 class EinsteinAgentAPIView(APIView):
     """
     API Endpoint: Accepts a question, uba_csv, html, and css, and returns an answer.
     """
-
     def post(self, request):
         question = request.data.get("question")
         uba_csv = request.data.get("uba_csv")
         html = request.data.get("html")
         css = request.data.get("css")
-
         if not all([question, uba_csv, html, css]):
-            return Response(
-                {"error": "All of 'question', 'uba_csv', 'html', and 'css' are required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "All of 'question', 'uba_csv', 'html', and 'css' are required."},
+                            status=status.HTTP_400_BAD_REQUEST)
         try:
             answer = einsteinAgent(question, uba_csv, html, css)
         except Exception as e:
-            return Response(
-                {"error": f"Error while generating answer: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
+            return Response({"error": f"Error while generating answer: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response({"einstein_answer": answer}, status=status.HTTP_200_OK)
 
-
-
+# -----------------------------
+# 6. Hussein Agent Endpoint
+# -----------------------------
 class HusseinAgentAPIView(APIView):
     """
     API Endpoint: Accepts a product question and its expert answer, then returns a simplified insight.
     """
-
     def post(self, request):
         question = request.data.get("question")
         answer = request.data.get("answer")
-
         if not question or not answer:
-            return Response(
-                {"error": "'question' and 'answer' fields are required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "'question' and 'answer' fields are required."},
+                            status=status.HTTP_400_BAD_REQUEST)
         try:
             summary = husseinAgent(question, answer)
         except Exception as e:
-            return Response(
-                {"error": f"Error while summarizing insight: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
+            return Response({"error": f"Error while summarizing insight: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response({"user_friendly_summary": summary}, status=status.HTTP_200_OK)
 
-
-#######################################################################################
-
+# -----------------------------
+# 7. Ultra Agent Endpoint
+# -----------------------------
 class UltraAgentAPIView(APIView):
     """
     Chain together all agents behind a single endpoint.
+    This updated version now uses the Page model to fetch HTML and CSS.
+    It requires a query parameter 'page_id' to look up the Page record.
     """
-
     def get(self, request):
-        # 1) Require & parse JWT
+        # (1) Parse and validate JWT
         auth_header = request.headers.get('Authorization')
         if not auth_header:
             return Response({"error": "Missing Authorization header."},
                             status=status.HTTP_401_UNAUTHORIZED)
-        
         parts = auth_header.split()
         if len(parts) != 2 or parts[0].lower() != 'bearer':
             return Response({"error": "Invalid Authorization header format. Must be: Bearer <token>"},
                             status=status.HTTP_401_UNAUTHORIZED)
-
         token = parts[1]
-
         try:
             decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
             user_id = decoded_token.get('user_id')
             if not user_id:
-                return Response({"error": "Token missing user_id."}, 
-                                status=status.HTTP_401_UNAUTHORIZED)
+                return Response({"error": "Token missing user_id."}, status=status.HTTP_401_UNAUTHORIZED)
             user = User.objects.get(pk=user_id)
         except Exception as e:
             return Response({"error": f"JWT Error: {str(e)}"},
                             status=status.HTTP_401_UNAUTHORIZED)
 
-        # 2) Retrieve CSV file from DB, decode it into text
+        # (2) Retrieve CSV file from Upload model for this user
         upload = Upload.objects.filter(uploaded_by=user).first()
         if not upload:
             return Response({"error": "No uploaded CSV found for this user."},
                             status=status.HTTP_404_NOT_FOUND)
-
-        # Assuming `upload.file` is a FileField or similar
-        upload = Upload.objects.filter(uploaded_by=user).first()
-        if not upload:
-            return Response({"error": "No uploaded CSV found for this user."},
-                            status=status.HTTP_404_NOT_FOUND)
-
-        # Use the path from the model
         file_path = upload.path
-
-        # If the path is relative, combine with MEDIA_ROOT, e.g.:
-        # file_path = os.path.join(settings.MEDIA_ROOT, upload.path)
-
-        # Now read the file from disk
         try:
             with open(file_path, mode='r', encoding='utf-8', errors='ignore') as f:
                 uba = f.read()  # CSV content as a string
@@ -249,69 +192,78 @@ class UltraAgentAPIView(APIView):
             return Response({"error": f"Error reading CSV file: {str(e)}"},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # 3) Fetch HTML from local endpoint (requires Bearer JWT)
-        business_html_url = "http://127.0.0.1:8000/toolkit/business-html/"
+        # (3) Retrieve the page_id from query parameters and fetch the Page
+        page_id = request.query_params.get('page_id')
+        if not page_id:
+            return Response({"error": "Missing required query parameter: page_id"},
+                            status=status.HTTP_400_BAD_REQUEST)
         try:
-            html_response = requests.get(
-                business_html_url,
-                headers={"Authorization": f"Bearer {token}"}
-            )
-            html_response.raise_for_status()
-            html = html_response.text  # If that endpoint returns plain text
-        except Exception as e:
-            return Response({"error": f"Error retrieving business HTML: {str(e)}"},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            page = Page.objects.get(id=page_id)
+        except Page.DoesNotExist:
+            return Response({"error": "Page not found."}, status=status.HTTP_404_NOT_FOUND)
+        # Ensure that the Page belongs to a Business owned by the user
+        if not page.business or page.business.user != user:
+            return Response({"error": "You do not have permission to access this page."},
+                            status=status.HTTP_403_FORBIDDEN)
+        if not page.url:
+            return Response({"error": "Page does not have a URL set."},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-        # 4) Fetch CSS from local endpoint (requires Bearer JWT)
-        business_css_url = "http://127.0.0.1:8000/toolkit/business-css/"
+        # (4) Directly fetch HTML from the Page URL
         try:
-            css_response = requests.get(
-                business_css_url,
-                headers={"Authorization": f"Bearer {token}"}
-            )
-            css_response.raise_for_status()
-            css = css_response.text
+            html_resp = requests.get(page.url, timeout=10)
+            html_resp.raise_for_status()
+            html = html_resp.text
         except Exception as e:
-            return Response({"error": f"Error retrieving business CSS: {str(e)}"},
+            return Response({"error": f"Error retrieving page HTML: {str(e)}"},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # 5) Call Feynman agent (UI analysis)
+        
+        # (5) Extract CSS information by parsing the HTML (external links + inline styles)
+        try:
+            soup = BeautifulSoup(html, "html.parser")
+            stylesheet_links = [link.get("href") for link in soup.find_all("link", rel="stylesheet") if link.get("href")]
+            inline_styles = [style.get_text(strip=True) for style in soup.find_all("style")]
+            css = "\n".join(inline_styles + stylesheet_links)
+        except Exception as e:
+            return Response({"error": f"Error retrieving page CSS: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # (6) Call Feynman agent (UI analysis)
         try:
             ui_report = feynmanAgent(html=html, css=css, title=None, headings=None, links=None)
         except Exception as e:
             return Response({"error": f"Feynman agent failed: {str(e)}"},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # 6) Call 'Jobs' logic (UX analysis) by reusing summarizer(user_id, uba)
+        
+        # (7) Call Jobs summarizer (UX analysis) using the CSV content
         try:
             ux_report = summarizer(user_id, uba)
         except Exception as e:
             return Response({"error": f"Jobs summarizer failed: {str(e)}"},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # 7) Call Davinci agent (generate question)
+        
+        # (8) Call Davinci agent to generate a question from UI and UX reports
         try:
             question = davinciAgent(ui_report, ux_report)
         except Exception as e:
             return Response({"error": f"Davinci agent failed: {str(e)}"},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # 8) Call Einstein agent (answer question w/ actual data)
+        
+        # (9) Call Einstein agent to answer the question with actual data
         try:
             answer = einsteinAgent(question, uba, html, css)
         except Exception as e:
             return Response({"error": f"Einstein agent failed: {str(e)}"},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # 9) Call Hussein agent (user-friendly summary)
+        
+        # (10) Call Hussein agent for a user-friendly summary of the answer
         try:
             output = husseinAgent(question, answer)
         except Exception as e:
             return Response({"error": f"Hussein agent failed: {str(e)}"},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # 10) Return or print results in your desired format
-        # We'll return JSON containing all agent outputs for clarity:
+        
+        # (11) Return all agent outputs
         return Response({
             "feynman_output": ui_report,
             "jobs_output": ux_report,

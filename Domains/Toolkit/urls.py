@@ -1,11 +1,11 @@
 from django.urls import path
-from .views import WebMetricsAPIView, BusinessHTMLAPIView, BusinessCSSAPIView
+from .views import WebMetricsAPIView, PageHTMLAPIView, PageCSSAPIView, RoleModelWebMetricsAPIView
 
 urlpatterns = [
-    path('web-metrics/role-model/', WebMetricsAPIView.as_view(), name='web-metrics'),
+    path('web-metrics/role-model/', RoleModelWebMetricsAPIView.as_view(), name='web-metrics'),
     path('web-metrics/business/', WebMetricsAPIView.as_view(), name='web-metrics'),
-    path('business-html/', BusinessHTMLAPIView.as_view(), name='business-html'),
-    path('business-css/', BusinessCSSAPIView.as_view(), name='business-css'),
+    path('business-html/', PageHTMLAPIView.as_view(), name='business-html'),
+    path('business-css/', PageCSSAPIView.as_view(), name='business-css'),
 
 
 ]

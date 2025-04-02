@@ -6,7 +6,7 @@ from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from Domains.Onboard.models import Business
+from Domains.Onboard.models import Business, Page
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 
@@ -84,131 +84,235 @@ class WebMetricsAPIView(APIView):
         except Business.DoesNotExist:
             return Response({"error": "Business not found for the authenticated user."}, status=status.HTTP_404_NOT_FOUND)
 
-        results = {}
+        page_id = request.query_params.get('page_id')
+        if not page_id:
+            return Response({"error": "Missing required query parameter: page_id"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            page = Page.objects.get(id=page_id, business=business)
+            target_url = page.url
+        except Page.DoesNotExist:
+            return Response({"error": "Page not found for the given page_id and user."}, status=status.HTTP_404_NOT_FOUND)
+
+        if not target_url:
+            return Response({"error": "Page URL is empty or missing."}, status=status.HTTP_400_BAD_REQUEST)
+
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            future_url_metrics = executor.submit(get_web_performance, business.url) if business.url else None
-            future_role_model_metrics = executor.submit(get_web_performance, business.role_model) if business.role_model else None
+            future_metrics = executor.submit(get_web_performance, target_url)
+            metrics_result = future_metrics.result()
 
-            if future_url_metrics:
-                results["url_metrics"] = future_url_metrics.result()
-            else:
-                results["url_metrics"] = "No business URL provided."
+        return Response({f"{business.name} metrics": metrics_result}, status=status.HTTP_200_OK)
 
-            if future_role_model_metrics:
-                results["role_model_metrics"] = future_role_model_metrics.result()
-            else:
-                results["role_model_metrics"] = "No role model URL provided."
+class RoleModelWebMetricsAPIView(APIView):
+    """
+    Endpoint for role model web metrics.
 
-        return Response(results, status=status.HTTP_200_OK)
+    Expected query parameter:
+        - page_id: ID of the Page.
+
+    Process:
+      1. Retrieves the Page by page_id.
+      2. Retrieves the associated Business via Page.business.
+      3. Gets the role_model from the Business.
+      4. Determines the page type from Page.page_type.
+      5. From the role_model, selects the URL matching the page type:
+           - "Landing Page"   → role_model.landing_page
+           - "Search Results Page" → role_model.results_page
+           - "Product Page"   → role_model.product_page
+      6. Computes web metrics for that URL using get_web_performance.
+      7. Returns the metrics keyed by "{role_model.name} {page_type} metrics".
+    """
+    def get(self, request, format=None):
+        # Extract the page_id from query parameters
+        page_id = request.query_params.get('page_id')
+        if not page_id:
+            return Response({"error": "Missing required query parameter: page_id"},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            page = Page.objects.get(id=page_id)
+        except Page.DoesNotExist:
+            return Response({"error": "Page not found for the given page_id"},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        # Ensure the page is linked to a business.
+        if not page.business:
+            return Response({"error": "Page is not associated with any business."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        business = page.business
+
+        # Ensure the business has an associated role model.
+        if not business.role_model:
+            return Response({"error": "Business does not have an associated role model."},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        role_model = business.role_model
+        page_type = page.page_type
+
+        # Determine the appropriate URL based on the page type.
+        if page_type == "Landing Page":
+            role_model_url = role_model.landing_page
+        elif page_type == "Search Results Page":
+            role_model_url = role_model.results_page
+        elif page_type == "Product Page":
+            role_model_url = role_model.product_page
+        else:
+            return Response({"error": "Unknown page type."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        if not role_model_url:
+            return Response({"error": f"No URL configured for {page_type} in the role model."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Get web performance metrics for the selected URL.
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future_metrics = executor.submit(get_web_performance, role_model_url)
+            metrics_result = future_metrics.result()
+
+        response_key = f"{role_model.name} {page_type} metrics"
+        return Response({response_key: metrics_result}, status=status.HTTP_200_OK)
 
 from bs4 import BeautifulSoup
 
-class BusinessHTMLAPIView(APIView):
+class PageHTMLAPIView(APIView):
+    """
+    Retrieves HTML details (title, meta description, headings, links) from the URL
+    stored on a Page record.
+    
+    Expected query parameter:
+        - page_id: ID of the Page.
+    """
     def get(self, request, format=None):
         # 1. Extract JWT
         auth_header = request.headers.get('Authorization')
         if not auth_header:
-            return Response({'error': 'Authorization header is required.'}, status=status.HTTP_401_UNAUTHORIZED)
-
+            return Response({'error': 'Authorization header is required.'},
+                            status=status.HTTP_401_UNAUTHORIZED)
         parts = auth_header.split()
         if len(parts) != 2 or parts[0].lower() != 'bearer':
-            return Response({'error': 'Authorization header must be in the format: Bearer <token>'}, status=status.HTTP_401_UNAUTHORIZED)
-
+            return Response({'error': 'Authorization header must be in the format: Bearer <token>'},
+                            status=status.HTTP_401_UNAUTHORIZED)
         token = parts[1]
         try:
             decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
             user_id = decoded_token.get('user_id')
             if not user_id:
-                return Response({'error': 'Token is missing user ID.'}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response({'error': 'Token is missing user ID.'},
+                                status=status.HTTP_401_UNAUTHORIZED)
             user = User.objects.get(id=user_id)
         except Exception as e:
-            return Response({'error': f'Invalid or expired token: {str(e)}'}, status=status.HTTP_401_UNAUTHORIZED)
-
-        # 2. Get Business
+            return Response({'error': f'Invalid or expired token: {str(e)}'},
+                            status=status.HTTP_401_UNAUTHORIZED)
+        
+        # 2. Retrieve the Page using the provided page_id
+        page_id = request.query_params.get('page_id')
+        if not page_id:
+            return Response({"error": "Missing required query parameter: page_id"},
+                            status=status.HTTP_400_BAD_REQUEST)
         try:
-            business = Business.objects.get(user=user)
-        except Business.DoesNotExist:
-            return Response({"error": "Business not found for the authenticated user."}, status=status.HTTP_404_NOT_FOUND)
-
-        if not business.url:
-            return Response({"error": "Business does not have a URL set."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # 3. Fetch and parse HTML
+            page = Page.objects.get(id=page_id)
+        except Page.DoesNotExist:
+            return Response({"error": "Page not found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Ensure the Page belongs to the authenticated user via its Business
+        if not page.business or page.business.user != user:
+            return Response({"error": "You do not have permission to access this page."},
+                            status=status.HTTP_403_FORBIDDEN)
+        
+        if not page.url:
+            return Response({"error": "Page does not have a URL set."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        
+        # 3. Fetch and parse HTML from the Page's URL
         try:
-            response = requests.get(business.url, timeout=10)
+            response = requests.get(page.url, timeout=10)
             response.raise_for_status()
-
             soup = BeautifulSoup(response.content, "html.parser")
-
-            # Extract common data
             html_data = {
-                "url": business.url,
+                "url": page.url,
                 "title": soup.title.string.strip() if soup.title else None,
-                "meta_description": next((meta.get("content") for meta in soup.find_all("meta") if meta.get("name") == "description"), None),
+                "meta_description": next(
+                    (meta.get("content") for meta in soup.find_all("meta") if meta.get("name") == "description"),
+                    None
+                ),
                 "headings": {
                     "h1": [h.get_text(strip=True) for h in soup.find_all("h1")],
                     "h2": [h.get_text(strip=True) for h in soup.find_all("h2")],
                     "h3": [h.get_text(strip=True) for h in soup.find_all("h3")]
                 },
-                "links": [a.get("href") for a in soup.find_all("a", href=True)][:20]  # limit to 20 links
+                "links": [a.get("href") for a in soup.find_all("a", href=True)][:20]
             }
-
             return Response(html_data, status=status.HTTP_200_OK)
-
         except Exception as e:
-            return Response({"error": f"Could not retrieve HTML from {business.url}: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": f"Could not retrieve HTML from {page.url}: {str(e)}"},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-class BusinessCSSAPIView(APIView):
+class PageCSSAPIView(APIView):
+    """
+    Retrieves CSS details (external stylesheet links and inline style blocks) from the URL
+    stored on a Page record.
+    
+    Expected query parameter:
+        - page_id: ID of the Page.
+    """
     def get(self, request, format=None):
-        # 1. JWT Auth
+        # 1. Extract JWT
         auth_header = request.headers.get('Authorization')
         if not auth_header:
-            return Response({'error': 'Authorization header is required.'}, status=status.HTTP_401_UNAUTHORIZED)
-
+            return Response({'error': 'Authorization header is required.'},
+                            status=status.HTTP_401_UNAUTHORIZED)
         parts = auth_header.split()
         if len(parts) != 2 or parts[0].lower() != 'bearer':
-            return Response({'error': 'Authorization header must be in the format: Bearer <token>'}, status=status.HTTP_401_UNAUTHORIZED)
-
+            return Response({'error': 'Authorization header must be in the format: Bearer <token>'},
+                            status=status.HTTP_401_UNAUTHORIZED)
         token = parts[1]
         try:
             decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
             user_id = decoded_token.get('user_id')
             if not user_id:
-                return Response({'error': 'Token is missing user ID.'}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response({'error': 'Token is missing user ID.'},
+                                status=status.HTTP_401_UNAUTHORIZED)
             user = User.objects.get(id=user_id)
         except Exception as e:
-            return Response({'error': f'Invalid or expired token: {str(e)}'}, status=status.HTTP_401_UNAUTHORIZED)
-
-        # 2. Get Business
+            return Response({'error': f'Invalid or expired token: {str(e)}'},
+                            status=status.HTTP_401_UNAUTHORIZED)
+        
+        # 2. Retrieve the Page using the provided page_id
+        page_id = request.query_params.get('page_id')
+        if not page_id:
+            return Response({"error": "Missing required query parameter: page_id"},
+                            status=status.HTTP_400_BAD_REQUEST)
         try:
-            business = Business.objects.get(user=user)
-        except Business.DoesNotExist:
-            return Response({"error": "Business not found for the authenticated user."}, status=status.HTTP_404_NOT_FOUND)
-
-        if not business.url:
-            return Response({"error": "Business does not have a URL set."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # 3. Fetch & parse HTML
+            page = Page.objects.get(id=page_id)
+        except Page.DoesNotExist:
+            return Response({"error": "Page not found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Ensure the Page belongs to the authenticated user via its Business
+        if not page.business or page.business.user != user:
+            return Response({"error": "You do not have permission to access this page."},
+                            status=status.HTTP_403_FORBIDDEN)
+        
+        if not page.url:
+            return Response({"error": "Page does not have a URL set."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        
+        # 3. Fetch and parse HTML from the Page's URL to extract CSS info
         try:
-            response = requests.get(business.url, timeout=10)
+            response = requests.get(page.url, timeout=10)
             response.raise_for_status()
             soup = BeautifulSoup(response.content, "html.parser")
-
-            # 4. Extract external stylesheet links
             stylesheet_links = [
                 link.get("href") for link in soup.find_all("link", rel="stylesheet") if link.get("href")
             ]
-
-            # 5. Extract inline <style> blocks
             inline_styles = [
                 style.get_text(strip=True) for style in soup.find_all("style")
             ]
-
             return Response({
-                "url": business.url,
+                "url": page.url,
                 "stylesheet_links": stylesheet_links,
                 "inline_styles": inline_styles[:3]  # limit to 3 style blocks for readability
             }, status=status.HTTP_200_OK)
-
         except Exception as e:
-            return Response({"error": f"Could not retrieve CSS from {business.url}: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": f"Could not retrieve CSS from {page.url}: {str(e)}"},
+                            status=status.HTTP_400_BAD_REQUEST)
