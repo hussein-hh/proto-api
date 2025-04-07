@@ -18,7 +18,6 @@ class SignupView(APIView):
         serializer = SignupSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
-            user.save()
             return Response({'message': 'User registered successfully!'}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -27,7 +26,8 @@ class LoginView(APIView):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
             user = authenticate(
-                username=serializer.validated_data['username'],
+                request,
+                email=serializer.validated_data['email'],
                 password=serializer.validated_data['password']
             )
 
@@ -35,14 +35,13 @@ class LoginView(APIView):
                 first_login = user.last_login is None
                 user.last_login = now()
                 user.save()
-                refresh = RefreshToken.for_user(user)
+                tokens = generate_jwt_token(user)
                 return Response({
                     'message': 'Login successful!',
-                    'access': str(refresh.access_token),
-                    'refresh': str(refresh),
+                    'access': tokens['access'],
+                    'refresh': tokens['refresh'],
                     'first_login': first_login,
                 }, status=status.HTTP_200_OK)
 
-            return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({"error": "Invalid email or password"}, status=status.HTTP_401_UNAUTHORIZED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
