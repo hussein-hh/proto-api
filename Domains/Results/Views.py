@@ -13,6 +13,40 @@ import requests
 import os
 from bs4 import BeautifulSoup
 
+dumb = '''
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Sample Page</title>
+  <style>
+    body { font-family: sans-serif; padding: 2em; }
+    h1 { color: #4CAF50; }
+  </style>
+</head>
+<body>
+  <h1>Hello, world!</h1>
+  <p>This is a short sample HTML page.</p>
+</body>
+</html>
+'''
+
+dumber = '''
+body {
+  font-family: sans-serif;
+  padding: 2em;
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+h1 {
+  color: #4CAF50;
+}
+
+p {
+  font-size: 1.1em;
+}
+
+'''
 
 User = get_user_model()
 
@@ -180,7 +214,7 @@ class UltraAgentAPIView(APIView):
                             status=status.HTTP_401_UNAUTHORIZED)
 
         # (2) Retrieve CSV file from Upload model for this user
-        upload = Upload.objects.filter(uploaded_by=user).first()
+        upload = Upload.objects.filter(uploaded_by_id=user).first()
         if not upload:
             return Response({"error": "No uploaded CSV found for this user."},
                             status=status.HTTP_404_NOT_FOUND)
@@ -230,7 +264,7 @@ class UltraAgentAPIView(APIView):
         
         # (6) Call Feynman agent (UI analysis)
         try:
-            ui_report = feynmanAgent(html=html, css=css, title=None, headings=None, links=None)
+            ui_report = feynmanAgent(html=dumb, css=dumber, title=None, headings=None, links=None)
         except Exception as e:
             return Response({"error": f"Feynman agent failed: {str(e)}"},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -251,7 +285,7 @@ class UltraAgentAPIView(APIView):
         
         # (9) Call Einstein agent to answer the question with actual data
         try:
-            answer = einsteinAgent(question, uba, html, css)
+            answer = einsteinAgent(question, uba, dumb, dumber)
         except Exception as e:
             return Response({"error": f"Einstein agent failed: {str(e)}"},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
