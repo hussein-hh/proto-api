@@ -64,14 +64,14 @@ class FileUploadView(APIView):
         business_type_slug = slugify(business.category)
         business_name = business.name
         business_id = business.id
-        user_name = user.username
+        #user_name = user.username
         user_id_str = str(user.id)
 
         user_directory = Path("uploads") / business_type_slug / str(business_id) / user_id_str
         user_directory.mkdir(parents=True, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        new_filename = f"{timestamp}_{business_name}_{business_id}_{user_name}_{user_id_str}_{file_name}"
+        new_filename = f"{timestamp}_{business_name}_{business_id}_{"user_name"}_{user_id_str}_{file_name}"
         file_path = user_directory / new_filename
 
         with file_path.open('wb+') as destination:
@@ -85,7 +85,7 @@ class FileUploadView(APIView):
             type=file_type,
             uploaded_by=user,
             name=new_filename,
-            references_page=page  # Associate with the provided Page
+            references_page=page  
         )
         cache.delete(f"summarizer_output_user_{user.id}")
 

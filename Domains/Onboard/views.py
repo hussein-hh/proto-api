@@ -109,7 +109,6 @@ class BusinessOnboardingAPIView(APIView):
             "role_model": business.role_model.id if business.role_model else None,
         }, status=status.HTTP_201_CREATED)
 
-
 class PageOnboardingAPIView(APIView):
     """
     Endpoint for page onboarding.
@@ -123,9 +122,12 @@ class PageOnboardingAPIView(APIView):
         token = request.data.get("token")
         if not token:
             return Response({"error": "Token is required"}, status=status.HTTP_401_UNAUTHORIZED)
+
         user, error = get_user_from_token(token)
         if error:
             return Response({"error": error}, status=status.HTTP_401_UNAUTHORIZED)
+
+        user_id = user.id 
 
         # Validate required fields
         page_type = request.data.get("page_type")
@@ -135,6 +137,7 @@ class PageOnboardingAPIView(APIView):
                 {"error": "Both page_type and url are required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
         valid_page_types = [choice[0] for choice in Page.PAGE_TYPE_CHOICES]
         if page_type not in valid_page_types:
             return Response({"error": "Invalid page type."}, status=status.HTTP_400_BAD_REQUEST)
@@ -152,11 +155,14 @@ class PageOnboardingAPIView(APIView):
         page = Page.objects.create(
             page_type=page_type,
             url=url,
-            business=business
+            business=business,
+            user=user
         )
+
         return Response({
             "id": page.id,
             "page_type": page.page_type,
             "url": page.url,
-            "business": page.business.id if page.business else None,
+            "business": business.id,
+            "user_id": user_id  
         }, status=status.HTTP_201_CREATED)
