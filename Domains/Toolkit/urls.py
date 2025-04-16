@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import WebMetricsAPIView, PageHTMLAPIView, PageCSSAPIView, RoleModelWebMetricsAPIView, UserPagesView
+from .views import WebMetricsAPIView, PageHTMLAPIView, PageCSSAPIView, RoleModelWebMetricsAPIView, UserPagesView, TakeScreenshotAPIView
 
 urlpatterns = [
     path('web-metrics/role-model/', RoleModelWebMetricsAPIView.as_view(), name='web-metrics'),
@@ -7,5 +7,5 @@ urlpatterns = [
     path('business-html/', PageHTMLAPIView.as_view(), name='business-html'),
     path('business-css/', PageCSSAPIView.as_view(), name='business-css'),
     path('user-pages/', UserPagesView.as_view(), name='user-pages'),
-
+    path('take-screenshot/', TakeScreenshotAPIView.as_view(), name='take-screenshot'),
 ]

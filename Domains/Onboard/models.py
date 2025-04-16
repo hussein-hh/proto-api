@@ -20,6 +20,7 @@ class RoleModel(models.Model):
     results_page = models.URLField(null=True, blank=True, max_length=1000)
     product_page = models.URLField(null=True, blank=True, max_length=1000)
 
+
     def __str__(self):
         return self.name
 
@@ -53,6 +54,8 @@ class Page(models.Model):
     page_type = models.CharField(max_length=50, choices=PAGE_TYPE_CHOICES, default="Landing Page")
     business = models.ForeignKey("Business", null=True, blank=True, on_delete=models.SET_NULL)
     user = models.ForeignKey(get_user_model(), null=True, blank=True, on_delete=models.SET_NULL)
+    screenshot = models.CharField(max_length=9630, null=True, blank=True)
+
 
 
     def __str__(self):

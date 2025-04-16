@@ -1,5 +1,7 @@
 import requests
 import jwt
+import os
+import base64
 import concurrent.futures
 import xml.etree.ElementTree as ET
 from django.conf import settings
@@ -10,9 +12,22 @@ from Domains.Onboard.models import Business, Page
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from rest_framework.permissions import IsAuthenticated
+from bs4 import BeautifulSoup
 
 User = get_user_model()
 
+def get_user_from_token(token):
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        user_id = payload.get("user_id")
+        user = User.objects.get(id=user_id)
+        return user, None
+    except jwt.ExpiredSignatureError:
+        return None, "Token has expired"
+    except jwt.InvalidTokenError:
+        return None, "Invalid token"
+    except User.DoesNotExist:
+        return None, "User not found"
 
 def get_web_performance(url):
     cache_key = f"web_metrics_{url}"
@@ -37,7 +52,6 @@ def get_web_performance(url):
 
     cache.set(cache_key, metrics, timeout=60 * 60)
     return metrics
-
 
 def get_page_xml(url):
     try:
@@ -173,8 +187,6 @@ class RoleModelWebMetricsAPIView(APIView):
 
         response_key = f"{role_model.name} {page_type} metrics"
         return Response({response_key: metrics_result}, status=status.HTTP_200_OK)
-
-from bs4 import BeautifulSoup
 
 class PageHTMLAPIView(APIView):
     """
@@ -318,21 +330,6 @@ class PageCSSAPIView(APIView):
             return Response({"error": f"Could not retrieve CSS from {page.url}: {str(e)}"},
                             status=status.HTTP_400_BAD_REQUEST)
         
-
-def get_user_from_token(token):
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-        user_id = payload.get("user_id")
-        user = User.objects.get(id=user_id)
-        return user, None
-    except jwt.ExpiredSignatureError:
-        return None, "Token has expired"
-    except jwt.InvalidTokenError:
-        return None, "Invalid token"
-    except User.DoesNotExist:
-        return None, "User not found"
-    
-
 class UserPagesView(APIView):
     def post(self, request):
         token = request.data.get("token")
@@ -353,3 +350,88 @@ class UserPagesView(APIView):
             for page in pages
         ]
         return Response(data)
+    
+class TakeScreenshotAPIView(APIView):
+    def get(self, request):
+        # 1. Authenticate user via JWT
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return Response({'error': 'Authorization header is required.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        parts = auth_header.split()
+        if len(parts) != 2 or parts[0].lower() != 'bearer':
+            return Response({'error': 'Authorization header must be in the format: Bearer <token>'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        token = parts[1]
+        try:
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+            user = User.objects.get(id=payload.get("user_id"))
+        except Exception as e:
+            return Response({'error': f'Invalid token: {str(e)}'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        # 2. Get the Page object using page_id
+        page_id = request.query_params.get("page_id")
+        if not page_id:
+            return Response({"error": "Missing required query parameter: page_id"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            page = Page.objects.get(id=page_id, user=user)
+        except Page.DoesNotExist:
+            return Response({"error": "Page not found or not owned by you."}, status=status.HTTP_404_NOT_FOUND)
+        
+        if not page.url:
+            return Response({"error": "This page does not have a URL set."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. Call ScreenshotAPI.net with updated parameters for troubleshooting
+        try:
+            api_url = "https://shot.screenshotapi.net/screenshot"
+            params = {
+                "token": "V3CB992-VGS4ZVJ-G9N5ZPA-DY1VSBM",
+                "url": page.url,
+                "output": "base64",       # Try "json" or "base64" depending on docs
+                "file_type": "png",
+                "full_page": "true"
+                # Remove "fresh" and "ttl" for initial testing
+            }
+
+            ss_response = requests.get(api_url, params=params)
+            ss_response.raise_for_status()  # This will raise an error for non-200 responses
+
+            data = ss_response.json()
+            image_base64 = data.get("base64")
+
+            if not image_base64:
+                return Response({"error": "Screenshot API did not return base64 data.",
+                                 "response": data}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            # Save the image file
+            screenshot_dir = os.path.join("uploads", "screenshots")
+            os.makedirs(screenshot_dir, exist_ok=True)
+
+            existing_files = [f for f in os.listdir(screenshot_dir) if f.startswith(f"{page.id}_")]
+            file_count = len(existing_files) + 1
+
+            filename = f"{page.id}_{page.page_type.replace(' ', '')}_{file_count}.png"
+            filepath = os.path.join(screenshot_dir, filename)
+
+            with open(filepath, "wb") as f:
+                f.write(base64.b64decode(image_base64))
+
+            # Update DB with screenshot path
+            page.screenshot = filepath
+            page.save()
+
+            return Response({
+                "message": "Screenshot saved successfully.",
+                "file_path": filepath
+            }, status=status.HTTP_200_OK)
+
+        except requests.exceptions.HTTPError as http_err:
+            # Log response text for debugging
+            error_text = ss_response.text if ss_response is not None else "No response text"
+            return Response({
+                "error": f"Failed to take screenshot: {str(http_err)}",
+                "response_text": error_text
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            return Response({"error": f"Failed to take screenshot: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
