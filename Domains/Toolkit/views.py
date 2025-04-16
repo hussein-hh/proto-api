@@ -317,54 +317,34 @@ class UserPagesView(APIView):
     
 class TakeScreenshotAPIView(APIView):
     def get(self, request):
-        # 1. Authenticate user via JWT using the helper function
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return Response({'error': 'Authorization header is required.'}, status=status.HTTP_401_UNAUTHORIZED)
-
-        parts = auth_header.split()
-        if len(parts) != 2 or parts[0].lower() != 'bearer':
-            return Response({'error': 'Authorization header must be in the format: Bearer <token>'}, status=status.HTTP_401_UNAUTHORIZED)
-
-        token = parts[1]
-        user, error = get_user_from_token(token)
-        if error:
-            return Response({'error': error}, status=status.HTTP_401_UNAUTHORIZED)
-        
-        # 2. Get the Page object using page_id (verify that the page is owned by the user)
+        # Get the page_id from the URL query parameters
         page_id = request.query_params.get("page_id")
         if not page_id:
-            return Response({"error": "Missing required query parameter: page_id"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Missing required parameter: page_id"}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            page = Page.objects.get(id=page_id, user=user)
+            page = Page.objects.get(id=page_id)
         except Page.DoesNotExist:
-            return Response({"error": "Page not found or not owned by you."}, status=status.HTTP_404_NOT_FOUND)
-        
+            return Response({"error": "Page not found."}, status=status.HTTP_404_NOT_FOUND)
+
         if not page.url:
             return Response({"error": "This page does not have a URL set."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 3. Call ScreenshotAPI.net and retrieve the screenshot as base64 or raw bytes
         try:
             api_url = "https://shot.screenshotapi.net/screenshot"
             params = {
                 "token": "V3CB992-VGS4ZVJ-G9N5ZPA-DY1VSBM",
                 "url": page.url,
-                "output": "base64",   # Requesting base64 output, but will fall back to URL if needed
+                "output": "base64",
                 "file_type": "png",
                 "full_page": "true"
             }
-
             ss_response = requests.get(api_url, params=params)
-            ss_response.raise_for_status()  # Raise error if status code is not 200
-
+            ss_response.raise_for_status()
             data = ss_response.json()
-
-            # First, try to get base64 data
             if data.get("base64"):
                 image_base64 = data.get("base64")
                 image_bytes = base64.b64decode(image_base64)
-            # Otherwise, if a screenshot URL exists then download the image content
             elif data.get("screenshot"):
                 screenshot_url = data.get("screenshot")
                 download_response = requests.get(screenshot_url)
@@ -382,35 +362,28 @@ class TakeScreenshotAPIView(APIView):
                 "response_text": error_text
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
-            return Response({"error": f"Failed to take screenshot: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": f"Failed to take screenshot: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # 4. Build the folder structure and filename based on business and page information.
-        #    We assume:
-        #       - The business name is stored in the BusinessOnboard table as the attribute 'name'.
-        #       - The page name is stored in the OnboardPage table as the attribute 'page_type'.
         try:
-            # Assuming Page has foreign keys 'business' and 'onboard_page'
-            business_name = slugify(page.business.name)        # e.g., "my-business"
-            page_name = slugify(page.page_type)       # e.g., "landing-page"
+            business_name = slugify(page.business.name)
+            page_name = slugify(page.page_type)
         except Exception as e:
-            return Response({"error": f"Failed to retrieve business/page details: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": f"Failed to retrieve business/page details: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         folder_path = os.path.join("uploads", "screenshot", business_name)
         file_name = f"{page_name}.png"
         file_path = os.path.join(folder_path, file_name)
-
-        # 5. Save the screenshot to the constructed folder and update the Page record
         try:
-            os.makedirs(folder_path, exist_ok=True)  # Create folder if it doesn't exist
-
+            os.makedirs(folder_path, exist_ok=True)
             with open(file_path, "wb") as f:
                 f.write(image_bytes)
         except Exception as e:
-            return Response({"error": f"Failed to save image: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": f"Failed to save image: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Update the screenshot path in the Page table and save
-        page.screenshot = file_path  # Consider storing a relative path if that better suits your needs
+        page.screenshot = file_path
         page.save()
-
-        # 6. Return a response indicating success (optionally include the screenshot path)
-        return Response({"message": "Screenshot saved successfully.", "screenshot": file_path}, status=status.HTTP_200_OK)
+        return Response({"message": "Screenshot saved successfully.", "screenshot": file_path},
+                        status=status.HTTP_200_OK)
