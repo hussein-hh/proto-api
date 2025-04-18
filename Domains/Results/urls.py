@@ -1,6 +1,8 @@
 from django.urls import path
-from Domains.Results.Views import ImageCaptionAPIView
+from Domains.Results.Views import PageStructureAPIView, PageStylingAPIView, PageUIReportAPIView
 
 urlpatterns = [
-    path('describe-image/', ImageCaptionAPIView.as_view(), name='describe-image'),
+    path('describe-structure/', PageStructureAPIView.as_view(), name='describe-image'),
+    path('describe-styling/', PageStylingAPIView.as_view(), name='describe_styling'),
+    path('describe-page/', PageUIReportAPIView.as_view(), name='describe_page'),
 ]

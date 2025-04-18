@@ -1,10 +1,14 @@
 import jwt
+import os
+import json
 from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth import get_user_model
 from .models import Business, Page, RoleModel
+import requests
+
 
 User = get_user_model()
 
@@ -116,7 +120,8 @@ class PageOnboardingAPIView(APIView):
       - token: JWT token.
       - page_type: one of the allowed page types.
       - url: page URL.
-    It will associate the page with the Business linked to the user.
+    It will associate the page with the Business linked to the user,
+    then fetch HTML metadata, CSS metadata, and a screenshot, saving each.
     """
     def post(self, request):
         token = request.data.get("token")
@@ -127,9 +132,6 @@ class PageOnboardingAPIView(APIView):
         if error:
             return Response({"error": error}, status=status.HTTP_401_UNAUTHORIZED)
 
-        user_id = user.id 
-
-        # Validate required fields
         page_type = request.data.get("page_type")
         url = request.data.get("url")
         if not page_type or not url:
@@ -142,7 +144,6 @@ class PageOnboardingAPIView(APIView):
         if page_type not in valid_page_types:
             return Response({"error": "Invalid page type."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get the associated Business record for this user
         try:
             business = Business.objects.get(user=user)
         except Business.DoesNotExist:
@@ -151,7 +152,6 @@ class PageOnboardingAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Create the Page instance
         page = Page.objects.create(
             page_type=page_type,
             url=url,
@@ -159,10 +159,61 @@ class PageOnboardingAPIView(APIView):
             user=user
         )
 
+        def make_dir(*parts):
+            path = os.path.join(settings.BASE_DIR, *parts)
+            os.makedirs(path, exist_ok=True)
+            return path
+
+        # HTML metadata
+        html_resp = requests.get(f"http://127.0.0.1:8000/toolkit/business-html/?page_id={page.id}")
+        if html_resp.ok:
+            html_data = html_resp.json()
+            html_dir = make_dir('Records', 'HTML', str(business.id), str(page.id))
+            html_path = os.path.join(html_dir, 'business_html.json')
+            with open(html_path, 'w', encoding='utf-8') as f:
+                json.dump(html_data, f, ensure_ascii=False, indent=2)
+            page.html = os.path.relpath(html_path, settings.BASE_DIR)
+
+        # CSS metadata
+        css_resp = requests.get(f"http://127.0.0.1:8000/toolkit/business-css/?page_id={page.id}")
+        if css_resp.ok:
+            css_data = css_resp.json()
+            css_dir = make_dir('Records', 'CSS', str(business.id), str(page.id))
+            css_path = os.path.join(css_dir, 'business_css.json')
+            with open(css_path, 'w', encoding='utf-8') as f:
+                json.dump(css_data, f, ensure_ascii=False, indent=2)
+            page.css = os.path.relpath(css_path, settings.BASE_DIR)
+
+        # Screenshot: get URL then download
+        try:
+            ss_api_resp = requests.get(
+                f"http://127.0.0.1:8000/toolkit/take-screenshot/?page_id={page.id}",
+                timeout=60
+            )
+            if ss_api_resp.ok:
+                data = ss_api_resp.json()
+                screenshot_url = data.get("screenshot_url")
+                if screenshot_url:
+                    download_resp = requests.get(screenshot_url, timeout=120)
+                    if download_resp.ok:
+                        ss_dir = make_dir('Records', 'SS', str(business.id), str(page.id))
+                        ss_path = os.path.join(ss_dir, 'screenshot.png')
+                        with open(ss_path, 'wb') as f:
+                            f.write(download_resp.content)
+                        page.screenshot = os.path.relpath(ss_path, settings.BASE_DIR)
+        except (requests.RequestException, ValueError):
+            # if anything fails, skip screenshot without breaking the flow
+            pass
+
+        page.save()
+
         return Response({
             "id": page.id,
             "page_type": page.page_type,
             "url": page.url,
             "business": business.id,
-            "user_id": user_id  
+            "user_id": user.id,
+            "html_path": page.html,
+            "css_path": page.css,
+            "screenshot_path": page.screenshot
         }, status=status.HTTP_201_CREATED)

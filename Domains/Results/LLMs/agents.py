@@ -1,38 +1,41 @@
-import os
+# agents.py
+import os, json
 from dotenv import load_dotenv
 from openai import OpenAI
-from Domains.Results.LLMs.prompts import image_caption_system_message, image_caption_prompt
+import Domains.Results.LLMs.prompts as prompts 
 
 load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+temp, max_tok = 0.1, 500
 
-openai_client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY")
-)
-temperature = 0.1
-max_tokens = 500
-
-def generate_caption(base64_image: str) -> str:
-
-    messages = [
-        {
-            "role": "system",
-            "content": image_caption_system_message
-        },
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": image_caption_prompt},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-            ]
-        }
+def describe_structure(image_b64, html_json, css_json):
+    content = [
+        {"type":"text","text":prompts.structure_prompt},
+        {"type":"image_url","image_url":{"url":f"data:image/png;base64,{image_b64}"}},
+        {"type":"text","text":json.dumps(html_json)},
+        {"type":"text","text":json.dumps(css_json)},
     ]
-    
-    response = openai_client.chat.completions.create(
-        model="gpt-4o",
-        messages=messages,
-        temperature=temperature,
-        max_tokens=max_tokens
+    msgs = [
+        {"role":"system","content":prompts.structure_system_message},
+        {"role":"user","content":content},
+    ]
+    resp = client.chat.completions.create(
+        model="gpt-4o", messages=msgs, temperature=temp, max_tokens=max_tok
     )
-    
-    caption = response.choices[0].message.content
-    return caption
+    return resp.choices[0].message.content
+
+def describe_styling(image_b64, html_json, css_json):
+    content = [
+        {"type":"text","text":prompts.styling_prompt},
+        {"type":"image_url","image_url":{"url":f"data:image/png;base64,{image_b64}"}},
+        {"type":"text","text":json.dumps(html_json)},
+        {"type":"text","text":json.dumps(css_json)},
+    ]
+    msgs = [
+        {"role":"system","content":prompts.styling_system_message},
+        {"role":"user","content":content},
+    ]
+    resp = client.chat.completions.create(
+        model="gpt-4o", messages=msgs, temperature=temp, max_tokens=max_tok
+    )
+    return resp.choices[0].message.content

@@ -16,13 +16,25 @@ class RoleModel(models.Model):
 
     name = models.CharField(max_length=255)
     category = models.CharField(max_length=255, choices=CATEGORY_CHOICES)
-    landing_page = models.URLField(null=True, blank=True, max_length=1000)
-    results_page = models.URLField(null=True, blank=True, max_length=1000)
-    product_page = models.URLField(null=True, blank=True, max_length=1000)
-
 
     def __str__(self):
         return self.name
+
+class RoleModelPage(models.Model):
+    PAGE_TYPE_CHOICES = [
+        ("Landing Page", "Landing Page"),
+        ("Search Results Page", "Search Results Page"),
+        ("Product Page", "Product Page"),
+    ]
+
+    role_model = models.ForeignKey(RoleModel, on_delete=models.CASCADE, related_name="pages")
+    page_type = models.CharField(max_length=50, choices=PAGE_TYPE_CHOICES)
+    wpm = models.FilePathField(path="Records/WPM-REPORTS", allow_files=True, match=".*\.json$", recursive=True)
+    ui_report = models.FilePathField(path="Records/UI-REPORTS", allow_files=True, match=".*\.json$", recursive=True)
+    url = models.URLField(null=True, blank=True, max_length=1000)
+
+    def __str__(self):
+        return f"{self.role_model.name} - {self.page_type}"
 
 
 class Business(models.Model):
@@ -33,6 +45,8 @@ class Business(models.Model):
     name = models.CharField(max_length=255, null=False)
     category = models.CharField(max_length=255, choices=CATEGORY_CHOICES)
     role_model = models.ForeignKey("RoleModel", null=True, blank=True, on_delete=models.SET_NULL)
+
+
 
     def __str__(self):
         return self.name
@@ -51,10 +65,13 @@ class Page(models.Model):
     )
 
     url = models.URLField(null=True, blank=True)
-    page_type = models.CharField(max_length=50, choices=PAGE_TYPE_CHOICES, default="Landing Page")
+    page_type = models.CharField(max_length=20, choices=PAGE_TYPE_CHOICES, default="Landing Page")
     business = models.ForeignKey("Business", null=True, blank=True, on_delete=models.SET_NULL)
     user = models.ForeignKey(get_user_model(), null=True, blank=True, on_delete=models.SET_NULL)
-    screenshot = models.CharField(max_length=9630, null=True, blank=True)
+    screenshot = models.TextField(null=True, blank=True)
+    html = models.TextField(null=True, blank=True)
+    css = models.TextField(null=True, blank=True)
+    ui_report = models.TextField(null=True, blank=True)
 
 
 

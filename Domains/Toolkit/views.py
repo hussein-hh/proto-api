@@ -156,33 +156,11 @@ class PageHTMLAPIView(APIView):
     """
     Retrieves HTML details (title, meta description, headings, links) from the URL
     stored on a Page record.
-    
+
     Expected query parameter:
         - page_id: ID of the Page.
     """
     def get(self, request, format=None):
-        # 1. Extract JWT
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return Response({'error': 'Authorization header is required.'},
-                            status=status.HTTP_401_UNAUTHORIZED)
-        parts = auth_header.split()
-        if len(parts) != 2 or parts[0].lower() != 'bearer':
-            return Response({'error': 'Authorization header must be in the format: Bearer <token>'},
-                            status=status.HTTP_401_UNAUTHORIZED)
-        token = parts[1]
-        try:
-            decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-            user_id = decoded_token.get('user_id')
-            if not user_id:
-                return Response({'error': 'Token is missing user ID.'},
-                                status=status.HTTP_401_UNAUTHORIZED)
-            user = User.objects.get(id=user_id)
-        except Exception as e:
-            return Response({'error': f'Invalid or expired token: {str(e)}'},
-                            status=status.HTTP_401_UNAUTHORIZED)
-        
-        # 2. Retrieve the Page using the provided page_id
         page_id = request.query_params.get('page_id')
         if not page_id:
             return Response({"error": "Missing required query parameter: page_id"},
@@ -191,17 +169,11 @@ class PageHTMLAPIView(APIView):
             page = Page.objects.get(id=page_id)
         except Page.DoesNotExist:
             return Response({"error": "Page not found."}, status=status.HTTP_404_NOT_FOUND)
-        
-        # Ensure the Page belongs to the authenticated user via its Business
-        if not page.business or page.business.user != user:
-            return Response({"error": "You do not have permission to access this page."},
-                            status=status.HTTP_403_FORBIDDEN)
-        
+
         if not page.url:
             return Response({"error": "Page does not have a URL set."},
                             status=status.HTTP_400_BAD_REQUEST)
-        
-        # 3. Fetch and parse HTML from the Page's URL
+
         try:
             response = requests.get(page.url, timeout=10)
             response.raise_for_status()
@@ -225,37 +197,16 @@ class PageHTMLAPIView(APIView):
             return Response({"error": f"Could not retrieve HTML from {page.url}: {str(e)}"},
                             status=status.HTTP_400_BAD_REQUEST)
 
+
 class PageCSSAPIView(APIView):
     """
     Retrieves CSS details (external stylesheet links and inline style blocks) from the URL
     stored on a Page record.
-    
+
     Expected query parameter:
         - page_id: ID of the Page.
     """
     def get(self, request, format=None):
-        # 1. Extract JWT
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return Response({'error': 'Authorization header is required.'},
-                            status=status.HTTP_401_UNAUTHORIZED)
-        parts = auth_header.split()
-        if len(parts) != 2 or parts[0].lower() != 'bearer':
-            return Response({'error': 'Authorization header must be in the format: Bearer <token>'},
-                            status=status.HTTP_401_UNAUTHORIZED)
-        token = parts[1]
-        try:
-            decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-            user_id = decoded_token.get('user_id')
-            if not user_id:
-                return Response({'error': 'Token is missing user ID.'},
-                                status=status.HTTP_401_UNAUTHORIZED)
-            user = User.objects.get(id=user_id)
-        except Exception as e:
-            return Response({'error': f'Invalid or expired token: {str(e)}'},
-                            status=status.HTTP_401_UNAUTHORIZED)
-        
-        # 2. Retrieve the Page using the provided page_id
         page_id = request.query_params.get('page_id')
         if not page_id:
             return Response({"error": "Missing required query parameter: page_id"},
@@ -264,17 +215,11 @@ class PageCSSAPIView(APIView):
             page = Page.objects.get(id=page_id)
         except Page.DoesNotExist:
             return Response({"error": "Page not found."}, status=status.HTTP_404_NOT_FOUND)
-        
-        # Ensure the Page belongs to the authenticated user via its Business
-        if not page.business or page.business.user != user:
-            return Response({"error": "You do not have permission to access this page."},
-                            status=status.HTTP_403_FORBIDDEN)
-        
+
         if not page.url:
             return Response({"error": "Page does not have a URL set."},
                             status=status.HTTP_400_BAD_REQUEST)
-        
-        # 3. Fetch and parse HTML from the Page's URL to extract CSS info
+
         try:
             response = requests.get(page.url, timeout=10)
             response.raise_for_status()
@@ -288,12 +233,12 @@ class PageCSSAPIView(APIView):
             return Response({
                 "url": page.url,
                 "stylesheet_links": stylesheet_links,
-                "inline_styles": inline_styles[:3]  # limit to 3 style blocks for readability
+                "inline_styles": inline_styles[:3]
             }, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": f"Could not retrieve CSS from {page.url}: {str(e)}"},
                             status=status.HTTP_400_BAD_REQUEST)
-        
+
 class UserPagesView(APIView):
     def post(self, request):
         token = request.data.get("token")
@@ -317,73 +262,62 @@ class UserPagesView(APIView):
     
 class TakeScreenshotAPIView(APIView):
     def get(self, request):
-        # Get the page_id from the URL query parameters
         page_id = request.query_params.get("page_id")
         if not page_id:
-            return Response({"error": "Missing required parameter: page_id"}, status=status.HTTP_400_BAD_REQUEST)
-        
+            return Response(
+                {"error": "Missing required parameter: page_id"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         try:
             page = Page.objects.get(id=page_id)
         except Page.DoesNotExist:
-            return Response({"error": "Page not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Page not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
         if not page.url:
-            return Response({"error": "This page does not have a URL set."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "This page does not have a URL set."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        api_url = "https://shot.screenshotapi.net/screenshot"
+        params = {
+            "token": "V3CB992-VGS4ZVJ-G9N5ZPA-DY1VSBM",
+            "url": page.url,
+            "file_type": "png",
+            "full_page": "true",
+            "output": "json"
+        }
 
         try:
-            api_url = "https://shot.screenshotapi.net/screenshot"
-            params = {
-                "token": "V3CB992-VGS4ZVJ-G9N5ZPA-DY1VSBM",
-                "url": page.url,
-                "output": "base64",
-                "file_type": "png",
-                "full_page": "true"
-            }
-            ss_response = requests.get(api_url, params=params)
+            ss_response = requests.get(api_url, params=params, timeout=120)
             ss_response.raise_for_status()
-            data = ss_response.json()
-            if data.get("base64"):
-                image_base64 = data.get("base64")
-                image_bytes = base64.b64decode(image_base64)
-            elif data.get("screenshot"):
-                screenshot_url = data.get("screenshot")
-                download_response = requests.get(screenshot_url)
-                download_response.raise_for_status()
-                image_bytes = download_response.content
-            else:
-                return Response({
-                    "error": "Screenshot API did not return any usable image data.",
-                    "response": data
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        except requests.exceptions.HTTPError as http_err:
-            error_text = ss_response.text if ss_response is not None else "No response text"
+            json_data = ss_response.json()
+            screenshot_url = json_data.get("screenshot")
+            if not screenshot_url:
+                return Response(
+                    {"error": "Screenshot URL not found in response."},
+                    status=status.HTTP_502_BAD_GATEWAY
+                )
+
             return Response({
-                "error": f"Failed to take screenshot: {str(http_err)}",
-                "response_text": error_text
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        except Exception as e:
-            return Response({"error": f"Failed to take screenshot: {str(e)}"},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                "success": "Screenshot captured successfully.",
+                "screenshot_url": screenshot_url
+            })
 
-        try:
-            business_name = slugify(page.business.name)
-            page_name = slugify(page.page_type)
-        except Exception as e:
-            return Response({"error": f"Failed to retrieve business/page details: {str(e)}"},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        folder_path = os.path.join("uploads", "screenshot", business_name)
-        file_name = f"{page_name}.png"
-        file_path = os.path.join(folder_path, file_name)
-        try:
-            os.makedirs(folder_path, exist_ok=True)
-            with open(file_path, "wb") as f:
-                f.write(image_bytes)
-        except Exception as e:
-            return Response({"error": f"Failed to save image: {str(e)}"},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        page.screenshot = file_path
-        page.save()
-        return Response({"message": "Screenshot saved successfully.", "screenshot": file_path},
-                        status=status.HTTP_200_OK)
+        except requests.exceptions.HTTPError as http_err:
+            return Response(
+                {
+                    "error": f"Failed to take screenshot: {http_err}",
+                    "response_text": ss_response.text
+                },
+                status=status.HTTP_502_BAD_GATEWAY
+            )
+        except requests.exceptions.RequestException as e:
+            return Response(
+                {"error": f"Failed to take screenshot: {e}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
