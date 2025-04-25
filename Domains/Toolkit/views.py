@@ -148,49 +148,50 @@ class RoleModelWebMetricsAPIView(APIView):
         return Response({response_key: metrics_result}, status=status.HTTP_200_OK)
 
 class PageHTMLAPIView(APIView):
-    """
-    Retrieves HTML details (title, meta description, headings, links) from the URL
-    stored on a Page record.
-
-    Expected query parameter:
-        - page_id: ID of the Page.
-    """
     def get(self, request, format=None):
         page_id = request.query_params.get('page_id')
         if not page_id:
-            return Response({"error": "Missing required query parameter: page_id"},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Missing required query parameter: page_id'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             page = Page.objects.get(id=page_id)
         except Page.DoesNotExist:
-            return Response({"error": "Page not found."}, status=status.HTTP_404_NOT_FOUND)
-
+            return Response({'error': 'Page not found.'}, status=status.HTTP_404_NOT_FOUND)
         if not page.url:
-            return Response({"error": "Page does not have a URL set."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
+            return Response({'error': 'Page does not have a URL set.'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            response = requests.get(page.url, timeout=10)
+            response = requests.get(page.url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
             response.raise_for_status()
-            soup = BeautifulSoup(response.content, "html.parser")
+            response.encoding = response.apparent_encoding
+            html_text = response.text
+            soup = BeautifulSoup(html_text, 'html.parser')
+            title = soup.title.string.strip() if soup.title and soup.title.string else None
+            meta_description = next(
+                (m.get('content') for m in soup.find_all('meta', attrs={'name': 'description'}) if m.get('content')),
+                None
+            )
+            headings = {
+                'h1': [h.get_text(strip=True) for h in soup.find_all('h1')],
+                'h2': [h.get_text(strip=True) for h in soup.find_all('h2')],
+                'h3': [h.get_text(strip=True) for h in soup.find_all('h3')]
+            }
+            links = []
+            for a in soup.find_all('a', href=True):
+                href = a['href']
+                if href and not href.startswith('javascript'):
+                    links.append(href)
+                    if len(links) == 20:
+                        break
             html_data = {
-                "url": page.url,
-                "title": soup.title.string.strip() if soup.title else None,
-                "meta_description": next(
-                    (meta.get("content") for meta in soup.find_all("meta") if meta.get("name") == "description"),
-                    None
-                ),
-                "headings": {
-                    "h1": [h.get_text(strip=True) for h in soup.find_all("h1")],
-                    "h2": [h.get_text(strip=True) for h in soup.find_all("h2")],
-                    "h3": [h.get_text(strip=True) for h in soup.find_all("h3")]
-                },
-                "links": [a.get("href") for a in soup.find_all("a", href=True)][:20]
+                'url': page.url,
+                'html': html_text,
+                'title': title,
+                'meta_description': meta_description,
+                'headings': headings,
+                'links': links
             }
             return Response(html_data, status=status.HTTP_200_OK)
         except Exception as e:
-            return Response({"error": f"Could not retrieve HTML from {page.url}: {str(e)}"},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': f'Could not retrieve HTML from {page.url}: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class PageCSSAPIView(APIView):
