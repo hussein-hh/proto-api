@@ -64,7 +64,6 @@ class FileUploadView(APIView):
         business_type_slug = slugify(business.category)
         business_name = business.name
         business_id = business.id
-        #user_name = user.username
         user_id_str = str(user.id)
 
         user_directory = Path("uploads") / business_type_slug / str(business_id) / user_id_str
@@ -138,7 +137,7 @@ class FileUpdateView(APIView):
 
         new_file = request.FILES.get('file')
         new_name = request.data.get('name')
-        new_page_id = request.data.get('page_id')  # Optionally update the referenced page
+        new_page_id = request.data.get('page_id') 
 
         if not new_file or not new_name:
             return error_response({'error': 'New file and name are required'}, status.HTTP_400_BAD_REQUEST)
@@ -170,7 +169,6 @@ class FileUpdateView(APIView):
 
         file_type = new_file.name.split('.')[-1].lower()
 
-        # Update file attributes
         upload.path = str(new_file_path)
         upload.type = file_type
         upload.name = new_filename
@@ -247,7 +245,7 @@ class FileRetrieveView(APIView):
 
 class FileShowView(APIView):
     permission_classes = [permissions.AllowAny]
-    CHUNK_SIZE = 1024 * 1024  # 1MB chunk limit
+    CHUNK_SIZE = 1024 * 1024
 
     def get(self, request, upload_id):
         token = request.headers.get('Authorization')

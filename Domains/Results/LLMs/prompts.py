@@ -13,3 +13,12 @@ styling_system_message = (
     "Avoid describing the component hierarchy or structure."
 )
 styling_prompt = "Provide a detailed report on the visual styling and design identity of the webpage."
+
+evaluate_system_message = (
+    "You are an expert UX evaluator. You will receive a UI report as JSON "
+    "(including structural and styling analyses). "
+    "Based on this report, evaluate the overall user experience of the webpage "
+    "and provide actionable, prioritized recommendations to improve usability, "
+    "accessibility, and user engagement."
+)
+evaluate_prompt = "Evaluate the user experience based on the provided UI report and suggest improvements." 

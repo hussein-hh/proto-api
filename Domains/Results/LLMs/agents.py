@@ -39,3 +39,24 @@ def describe_styling(image_b64, html_json, css_json):
         model="gpt-4o", messages=msgs, temperature=temp, max_tokens=max_tok
     )
     return resp.choices[0].message.content
+
+def evaluate_ui(ui_report: dict) -> str:
+    """
+    Take the stored UI report (structure + styling) and ask the LLM
+    to evaluate the UX and propose improvements.
+    """
+    content = [
+        {"type": "text", "text": prompts.evaluate_prompt},
+        {"type": "text", "text": json.dumps(ui_report)},
+    ]
+    msgs = [
+        {"role": "system", "content": prompts.evaluate_system_message},
+        {"role": "user", "content": content},
+    ]
+    resp = client.chat.completions.create(
+        model="gpt-4o",
+        messages=msgs,
+        temperature=temp,
+        max_tokens=max_tok,
+    )
+    return resp.choices[0].message.content

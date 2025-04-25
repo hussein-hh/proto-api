@@ -43,7 +43,6 @@ class UserOnboardingAPIView(APIView):
         if error:
             return Response({"error": error}, status=status.HTTP_401_UNAUTHORIZED)
 
-        # Validate required fields
         first_name = request.data.get("first_name")
         last_name = request.data.get("last_name")
         username = request.data.get("username")
@@ -53,7 +52,6 @@ class UserOnboardingAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Update the user model
         user.first_name = first_name
         user.last_name = last_name
         user.username = username
@@ -78,22 +76,19 @@ class BusinessOnboardingAPIView(APIView):
         if error:
             return Response({"error": error}, status=status.HTTP_401_UNAUTHORIZED)
 
-        # Validate required fields
         name = request.data.get("name")
         category = request.data.get("category")
-        role_model_id = request.data.get("role_model")  # expecting an id
+        role_model_id = request.data.get("role_model") 
         if not name or not category:
             return Response(
                 {"error": "Both name and category are required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Validate category against allowed choices
         valid_categories = [choice[0] for choice in Business.CATEGORY_CHOICES]
         if category not in valid_categories:
             return Response({"error": "Invalid category."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Look up RoleModel if provided
         role_model = None
         if role_model_id:
             try:
@@ -101,7 +96,6 @@ class BusinessOnboardingAPIView(APIView):
             except RoleModel.DoesNotExist:
                 return Response({"error": "Role model not found."}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Because Business has a OneToOneField to user, update if it exists or create new.
         business, created = Business.objects.update_or_create(
             user=user,
             defaults={"name": name, "category": category, "role_model": role_model}
@@ -164,7 +158,6 @@ class PageOnboardingAPIView(APIView):
             os.makedirs(path, exist_ok=True)
             return path
 
-        # HTML metadata
         html_resp = requests.get(f"http://127.0.0.1:8000/toolkit/business-html/?page_id={page.id}")
         if html_resp.ok:
             html_data = html_resp.json()
@@ -174,7 +167,6 @@ class PageOnboardingAPIView(APIView):
                 json.dump(html_data, f, ensure_ascii=False, indent=2)
             page.html = os.path.relpath(html_path, settings.BASE_DIR)
 
-        # CSS metadata
         css_resp = requests.get(f"http://127.0.0.1:8000/toolkit/business-css/?page_id={page.id}")
         if css_resp.ok:
             css_data = css_resp.json()
@@ -184,7 +176,6 @@ class PageOnboardingAPIView(APIView):
                 json.dump(css_data, f, ensure_ascii=False, indent=2)
             page.css = os.path.relpath(css_path, settings.BASE_DIR)
 
-        # Screenshot: get URL then download
         try:
             ss_api_resp = requests.get(
                 f"http://127.0.0.1:8000/toolkit/take-screenshot/?page_id={page.id}",
@@ -202,7 +193,6 @@ class PageOnboardingAPIView(APIView):
                             f.write(download_resp.content)
                         page.screenshot = os.path.relpath(ss_path, settings.BASE_DIR)
         except (requests.RequestException, ValueError):
-            # if anything fails, skip screenshot without breaking the flow
             pass
 
         page.save()
@@ -217,3 +207,31 @@ class PageOnboardingAPIView(APIView):
             "css_path": page.css,
             "screenshot_path": page.screenshot
         }, status=status.HTTP_201_CREATED)
+
+class EvaluateUIAPIView(APIView):
+    """
+    GET /ask-ai/evaluate-ui/?page_id=<id>
+    Loads the stored UI report JSON for the given page and returns it as 'evaluation'.
+    """
+    def get(self, request):
+        pid = request.query_params.get("page_id")
+        if not pid:
+            return Response({"error": "page_id missing"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            page = Page.objects.get(id=pid)
+        except Page.DoesNotExist:
+            return Response({"error": "Page not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        ui_report_path = page.ui_report
+        if not ui_report_path:
+            return Response({"error": "ui_report not available for this page"},
+                             status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            with open(ui_report_path, "r", encoding="utf-8") as f:
+                report_data = json.load(f)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({"evaluation": report_data}, status=status.HTTP_200_OK)

@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 from Domains.Onboard.models import Page
-from Domains.Results.LLMs.agents import describe_structure, describe_styling
+from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui
 
 executor = ThreadPoolExecutor()
 
@@ -106,3 +106,30 @@ class PageUIReportAPIView(APIView):
             "ui_report": report_data,
             "saved_path": file_path
         }, status=status.HTTP_200_OK)
+
+class EvaluateUIAPIView(APIView):
+    def get(self, request):
+        pid = request.query_params.get("page_id")
+        if not pid:
+            return Response({"error": "page_id missing"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            page = Page.objects.get(id=pid)
+        except Page.DoesNotExist:
+            return Response({"error": "Page not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        ui_report_path = page.ui_report
+        if not ui_report_path:
+            return Response({"error": "UI report not generated"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            report_data = json.load(open(ui_report_path, "r", encoding="utf-8"))
+        except Exception as e:
+            return Response({"error": f"Could not read UI report: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        try:
+            evaluation = evaluate_ui(report_data)
+        except Exception as e:
+            return Response({"error": f"Evaluation failed: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({"evaluation": evaluation}, status=status.HTTP_200_OK)

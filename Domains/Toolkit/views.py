@@ -102,7 +102,6 @@ class WebMetricsAPIView(APIView):
 class RoleModelWebMetricsAPIView(APIView):
 
     def get(self, request, format=None):
-        # Extract the page_id from query parameters
         page_id = request.query_params.get('page_id')
         if not page_id:
             return Response({"error": "Missing required query parameter: page_id"},
@@ -114,14 +113,12 @@ class RoleModelWebMetricsAPIView(APIView):
             return Response({"error": "Page not found for the given page_id"},
                             status=status.HTTP_404_NOT_FOUND)
 
-        # Ensure the page is linked to a business.
         if not page.business:
             return Response({"error": "Page is not associated with any business."},
                             status=status.HTTP_400_BAD_REQUEST)
 
         business = page.business
 
-        # Ensure the business has an associated role model.
         if not business.role_model:
             return Response({"error": "Business does not have an associated role model."},
                             status=status.HTTP_404_NOT_FOUND)
@@ -129,7 +126,6 @@ class RoleModelWebMetricsAPIView(APIView):
         role_model = business.role_model
         page_type = page.page_type
 
-        # Determine the appropriate URL based on the page type.
         if page_type == "Landing Page":
             role_model_url = role_model.landing_page
         elif page_type == "Search Results Page":
@@ -144,7 +140,6 @@ class RoleModelWebMetricsAPIView(APIView):
             return Response({"error": f"No URL configured for {page_type} in the role model."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # Get web performance metrics for the selected URL.
         with concurrent.futures.ThreadPoolExecutor() as executor:
             future_metrics = executor.submit(get_web_performance, role_model_url)
             metrics_result = future_metrics.result()
@@ -285,7 +280,7 @@ class TakeScreenshotAPIView(APIView):
 
         api_url = "https://shot.screenshotapi.net/screenshot"
         params = {
-            "token": "V3CB992-VGS4ZVJ-G9N5ZPA-DY1VSBM",
+            "token": "R9M790E-J3XMT8Y-MA30EFT-JEFE9PK",
             "url": page.url,
             "file_type": "png",
             "full_page": "true",
