@@ -20,7 +20,7 @@ def describe_structure(image_b64, html_json, css_json):
         {"role":"user","content":content},
     ]
     resp = client.chat.completions.create(
-        model="gpt-4o", messages=msgs, temperature=temp, max_tokens=max_tok
+        model="gpt-4.1-2025-04-14", messages=msgs, temperature=temp, max_tokens=max_tok
     )
     return resp.choices[0].message.content
 
