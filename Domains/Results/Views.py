@@ -1,11 +1,17 @@
 # views.py
-import json, base64, asyncio, os
+import json, base64, asyncio, os, requests
 from concurrent.futures import ThreadPoolExecutor
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 from Domains.Onboard.models import Page
-from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui
+from Domains.ManageData.models import Upload
+import re, csv
+from django.utils.text import slugify
+from pathlib import Path
+from django.http import HttpResponse
+from rest_framework.response import Response
+from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui, evaluate_uba, generate_chart_configs
 
 executor = ThreadPoolExecutor()
 
@@ -133,3 +139,122 @@ class EvaluateUIAPIView(APIView):
             return Response({"error": f"Evaluation failed: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({"evaluation": evaluation}, status=status.HTTP_200_OK)
+    
+    
+class EvaluateUBAAPIView(APIView):
+    def get(self, request):
+        pid = request.query_params.get("page_id")
+        if not pid:
+            return Response({"error":"page_id missing"}, status=400)
+
+        try:
+            up = Upload.objects.get(references_page_id=pid)
+        except Upload.DoesNotExist:
+            return Response({"error":"Upload not found"}, status=404)
+
+        try:
+            result = evaluate_uba(up.path)
+        except Exception as e:
+            return Response({"error":str(e)}, status=500)
+
+        folder = os.path.join("Records", "UBA-REPORTS", pid)
+        os.makedirs(folder, exist_ok=True)
+        file_path = os.path.join(folder, "uba_report.json")
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump({"report": result}, f, ensure_ascii=False, indent=2)
+
+        up.uba_report = file_path
+        up.save()
+
+        return Response({"uba_report": result, "saved_path": file_path}, status=200)
+    
+BULLET_REGEX = re.compile(r'^\d+\.\s*(.+)')
+CONFIG_REGEX = re.compile(r'^\$(\{.*\})$')
+
+class GenerateChartsAPIView(APIView):
+    """
+    1. Ensures UBA evaluation exists, generating it if missing.
+    2. Reads the UBA evaluation text and raw UBA data.
+    3. Parses numbered observations.
+    4. Calls generate_chart_configs to get multiple $<config> lines.
+    5. Saves each chart under Records/plots/<business_id>/<page_id>/<descriptive-name>.png.
+    6. Returns JSON with saved file paths.
+    """
+    def get(self, request):
+        page_id = request.query_params.get("page_id")
+        if not page_id:
+            return Response({"error": "page_id missing"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            up = Upload.objects.get(references_page__id=page_id)
+        except Upload.DoesNotExist:
+            return Response({"error": "Upload not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        business_id = up.references_page.business.id
+
+        # Generate UBA report if missing
+        if not up.uba_report or not Path(up.uba_report).exists():
+            try:
+                report_text = evaluate_uba(up.path)
+                folder_uba = Path("Records") / "UBA-REPORTS" / str(business_id) / str(page_id)
+                folder_uba.mkdir(parents=True, exist_ok=True)
+                report_path = folder_uba / "uba_report.json"
+                with report_path.open("w", encoding="utf-8") as f:
+                    json.dump({"report": report_text}, f, ensure_ascii=False, indent=2)
+                up.uba_report = str(report_path)
+                up.save()
+            except Exception as e:
+                return Response({"error": f"Error generating UBA report: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Load evaluation report
+        try:
+            with open(up.uba_report, encoding="utf-8") as f:
+                evaluation_text = json.load(f)["report"]
+        except Exception as e:
+            return Response({"error": f"Cannot load UBA report: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Parse observations
+        observations = [m.group(1) for m in (BULLET_REGEX.match(line) for line in evaluation_text.splitlines()) if m]
+
+        # Load raw UBA data
+        try:
+            if up.path.lower().endswith(".csv"):
+                with open(up.path, newline="", encoding="utf-8") as f:
+                    rows = list(csv.DictReader(f))
+                uba_json_str = json.dumps(rows)
+            else:
+                uba_json_str = Path(up.path).read_text(encoding="utf-8")
+        except Exception as e:
+            return Response({"error": f"Cannot load UBA data: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Generate chart configs
+        raw_configs = generate_chart_configs(evaluation_text, uba_json_str)
+        config_lines = [m.group(1) for m in (CONFIG_REGEX.match(line.strip()) for line in raw_configs.splitlines()) if m]
+        if not config_lines:
+            return Response({"error": "No configs produced", "raw": raw_configs}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Save charts
+        out_folder = Path("Records") / "plots" / str(business_id) / str(page_id)
+        out_folder.mkdir(parents=True, exist_ok=True)
+
+        stored = []
+        for obs, cfg in zip(observations, config_lines):
+            try:
+                json.loads(cfg)
+            except ValueError:
+                continue
+            slug = slugify(" ".join(obs.split()[:5])) or 'chart'
+            file_path = out_folder / f"{slug}.png"
+            resp = requests.get(
+                "http://127.0.0.1:8000/toolkit/plot-chart/",
+                params={"config": cfg}
+            )
+            if resp.status_code != 200:
+                continue
+            file_path.write_bytes(resp.content)
+            stored.append(str(file_path))
+
+        if not stored:
+            return Response({"error": "All chart requests failed"}, status=status.HTTP_502_BAD_GATEWAY)
+
+        return Response({"charts_saved": stored}, status=status.HTTP_200_OK)

@@ -60,3 +60,45 @@ def evaluate_ui(ui_report: dict) -> str:
         max_tokens=max_tok,
     )
     return resp.choices[0].message.content
+
+import os, json, csv
+
+def evaluate_uba(uba_path):
+    # load UBA as JSON or CSV
+    if uba_path.lower().endswith(".csv"):
+        with open(uba_path, newline="", encoding="utf-8") as f:
+            uba = list(csv.DictReader(f))
+    else:
+        uba = json.load(open(uba_path, "r", encoding="utf-8"))
+
+    # build your LLM payload exactly as before
+    content = [
+        {"type":"text","text":prompts.evaluate_prompt},
+        {"type":"text","text":json.dumps(uba)},
+    ]
+    msgs = [
+        {"role":"system","content":prompts.evaluate_system_message},
+        {"role":"user","content":content},
+    ]
+    resp = client.chat.completions.create(
+        model="gpt-4o", messages=msgs, temperature=temp, max_tokens=max_tok
+    )
+    return resp.choices[0].message.content
+
+def generate_chart_configs(observations: str, uba_json: str) -> str:
+    user_prompt = prompts.chart_config_user_template \
+        .replace("{OBS}", observations) \
+        .replace("{UBA}", uba_json)
+
+    msgs = [
+        {"role": "system", "content": prompts.chart_config_system_message},
+        {"role": "user",   "content": user_prompt},
+    ]
+
+    resp = client.chat.completions.create(
+        model="gpt-4o",
+        messages=msgs,
+        temperature=temp,
+        max_tokens=max_tok,
+    )
+    return resp.choices[0].message.content.strip()
