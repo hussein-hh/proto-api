@@ -24,10 +24,10 @@ migrations/
 *migrations/
 
 # files in Records subfolders
-#Records/*/*
+Records/*/*
 
 # keep the folders themselves
-#!Records/*
+!Records/*
 
 # Local helper scripts (macos)
 *.sh

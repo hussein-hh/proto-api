@@ -113,22 +113,41 @@ class EvaluateUIAPIView(APIView):
         if not pid:
             return Response({"error": "page_id missing"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # fetch page record
         try:
             page = Page.objects.get(id=pid)
         except Page.DoesNotExist:
             return Response({"error": "Page not found"}, status=status.HTTP_404_NOT_FOUND)
 
+        # load previously saved UI report
         ui_report_path = page.ui_report
         if not ui_report_path:
             return Response({"error": "UI report not generated"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            report_data = json.load(open(ui_report_path, "r", encoding="utf-8"))
+            with open(ui_report_path, "r", encoding="utf-8") as f:
+                report_data = json.load(f)
         except Exception as e:
             return Response({"error": f"Could not read UI report: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+        # --- new: load screenshot and fetch metadata ---
         try:
-            evaluation = evaluate_ui(report_data)
+            with open(page.screenshot, "rb") as img_f:
+                screenshot_b64 = base64.b64encode(img_f.read()).decode()
+        except Exception as e:
+            return Response({"error": f"Failed to load screenshot: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        business_type = getattr(page.business, "category", "unknown")
+        page_type     = getattr(page,        "page_type", "unknown")
+
+        # call the pure-LLM agent
+        try:
+            evaluation = evaluate_ui(
+                report_data,
+                screenshot_b64,
+                business_type,
+                page_type
+            )
         except Exception as e:
             return Response({"error": f"Evaluation failed: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 

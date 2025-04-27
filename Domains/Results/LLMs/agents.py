@@ -40,19 +40,29 @@ def describe_styling(image_b64, html_json, css_json):
     )
     return resp.choices[0].message.content
 
-def evaluate_ui(ui_report: dict) -> str:
-    """
-    Take the stored UI report (structure + styling) and ask the LLM
-    to evaluate the UX and propose improvements.
-    """
+import json
+from openai import OpenAI
+import Domains.Results.LLMs.prompts as prompts
+
+def evaluate_ui(
+    ui_report: dict,
+    screenshot_b64: str,
+    business_type: str,
+    page_type: str
+) -> str:
+
     content = [
         {"type": "text", "text": prompts.evaluate_prompt},
+        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{screenshot_b64}"}},
         {"type": "text", "text": json.dumps(ui_report)},
+        {"type": "text", "text": f"Business type: {business_type}"},
+        {"type": "text", "text": f"Page type: {page_type}"},
     ]
     msgs = [
         {"role": "system", "content": prompts.evaluate_system_message},
-        {"role": "user", "content": content},
+        {"role": "user",   "content": content},
     ]
+
     resp = client.chat.completions.create(
         model="gpt-4o",
         messages=msgs,
