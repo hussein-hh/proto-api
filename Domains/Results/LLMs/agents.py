@@ -70,3 +70,17 @@ def evaluate_ui(
         max_tokens=max_tok,
     )
     return resp.choices[0].message.content
+
+def formulate_ui(evaluation_json: dict) -> str:
+    content = [
+        {"type": "text", "text": prompts.formulator_prompt},
+        {"type": "text", "text": json.dumps(evaluation_json)},
+    ]
+    msgs = [
+        {"role": "system", "content": prompts.formulator_system_message},
+        {"role": "user",   "content": content},
+    ]
+    resp = client.chat.completions.create(
+        model="gpt-4o", messages=msgs, temperature=temp, max_tokens=max_tok
+    )
+    return resp.choices[0].message.content

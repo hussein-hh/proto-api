@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 from Domains.Onboard.models import Page
-from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui
+from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui, formulate_ui
 
 executor = ThreadPoolExecutor()
 
@@ -152,3 +152,34 @@ class EvaluateUIAPIView(APIView):
             return Response({"error": f"Evaluation failed: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({"evaluation": evaluation}, status=status.HTTP_200_OK)
+    
+class FormulateUIAPIView(APIView):
+    def get(self, request):
+        pid = request.query_params.get("page_id")
+        if not pid:
+            return Response({"error":"page_id missing"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            page = Page.objects.get(id=pid)
+        except Page.DoesNotExist:
+            return Response({"error":"Page not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            evaluation = json.load(open(page.ui_report, "r", encoding="utf-8"))
+        except Exception as e:
+            return Response({"error":f"Could not read UI report: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        try:
+            formatted = formulate_ui(evaluation)
+        except Exception as e:
+            return Response({"error":f"Formulation failed: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        business_id = str(page.business.id)
+        folder     = os.path.join("Records", "UI-FORMATS", business_id, pid)
+        os.makedirs(folder, exist_ok=True)
+        file_path  = os.path.join(folder, "formatted_report.txt")
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(formatted)
+        page.formatted_report = file_path
+        page.save()
+
+        return Response({"formatted_report": formatted, "saved_path": file_path}, status=status.HTTP_200_OK)

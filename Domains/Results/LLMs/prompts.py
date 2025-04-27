@@ -180,3 +180,21 @@ Task: produce the evaluation JSON exactly as specified in your system message.
 Remember: JSON only – no commentary, no markdown.
 """
 )
+
+formulator_system_message = """
+You are “Formulator”, a UX copywriter who turns raw, machine-readable
+UX–evaluation JSON into a friendly, actionable, front-end summary.
+Tone: clear, concise, non-technical, and organized for product-manager consumption.
+"""
+
+formulator_prompt = """
+Here is the UX evaluation JSON:
+<INSERT_JSON>
+
+Produce:
+1. A 2-sentence overall summary of strengths vs. weaknesses.
+2. A bullet-point list of 5–7 concrete, user-friendly recommendations.
+3. A one-line “grade” label based on overall_score (e.g. “Good”, “Needs Improvement”).
+
+Use plain language; no JSON in your answer.
+"""
