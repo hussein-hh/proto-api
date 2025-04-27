@@ -11,7 +11,7 @@ from django.utils.text import slugify
 from pathlib import Path
 from django.http import HttpResponse
 from rest_framework.response import Response
-from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui, evaluate_uba, generate_chart_configs
+from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui, evaluate_uba, generate_chart_configs, formulate_ui
 
 executor = ThreadPoolExecutor()
 
@@ -119,26 +119,76 @@ class EvaluateUIAPIView(APIView):
         if not pid:
             return Response({"error": "page_id missing"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # fetch page record
         try:
             page = Page.objects.get(id=pid)
         except Page.DoesNotExist:
             return Response({"error": "Page not found"}, status=status.HTTP_404_NOT_FOUND)
 
+        # load previously saved UI report
         ui_report_path = page.ui_report
         if not ui_report_path:
             return Response({"error": "UI report not generated"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            report_data = json.load(open(ui_report_path, "r", encoding="utf-8"))
+            with open(ui_report_path, "r", encoding="utf-8") as f:
+                report_data = json.load(f)
         except Exception as e:
             return Response({"error": f"Could not read UI report: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+        # --- new: load screenshot and fetch metadata ---
         try:
-            evaluation = evaluate_ui(report_data)
+            with open(page.screenshot, "rb") as img_f:
+                screenshot_b64 = base64.b64encode(img_f.read()).decode()
+        except Exception as e:
+            return Response({"error": f"Failed to load screenshot: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        business_type = getattr(page.business, "category", "unknown")
+        page_type     = getattr(page,        "page_type", "unknown")
+
+        # call the pure-LLM agent
+        try:
+            evaluation = evaluate_ui(
+                report_data,
+                screenshot_b64,
+                business_type,
+                page_type
+            )
         except Exception as e:
             return Response({"error": f"Evaluation failed: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({"evaluation": evaluation}, status=status.HTTP_200_OK)
+    
+class FormulateUIAPIView(APIView):
+    def get(self, request):
+        pid = request.query_params.get("page_id")
+        if not pid:
+            return Response({"error":"page_id missing"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            page = Page.objects.get(id=pid)
+        except Page.DoesNotExist:
+            return Response({"error":"Page not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            evaluation = json.load(open(page.ui_report, "r", encoding="utf-8"))
+        except Exception as e:
+            return Response({"error":f"Could not read UI report: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        try:
+            formatted = formulate_ui(evaluation)
+        except Exception as e:
+            return Response({"error":f"Formulation failed: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        business_id = str(page.business.id)
+        folder     = os.path.join("Records", "UI-FORMATS", business_id, pid)
+        os.makedirs(folder, exist_ok=True)
+        file_path  = os.path.join(folder, "formatted_report.txt")
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(formatted)
+        page.formatted_report = file_path
+        page.save()
+
+        return Response({"formatted_report": formatted, "saved_path": file_path}, status=status.HTTP_200_OK)
     
     
 class EvaluateUBAAPIView(APIView):

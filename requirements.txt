@@ -6,3 +6,5 @@ pymysql
 djangorestframework-simplejwt
 django-cors-headers
 groq
+Pillow
+openai
