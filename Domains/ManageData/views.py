@@ -34,63 +34,51 @@ class FileUploadView(APIView):
     def post(self, request):
         token = request.data.get('token')
         if not token:
-            return error_response({'error': 'Token is required'}, status.HTTP_401_UNAUTHORIZED)
+            return Response({'error': 'Token is required'}, status=status.HTTP_401_UNAUTHORIZED)
         try:
-            decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-            user_id = decoded_token.get('user_id')
-            if not user_id:
-                return error_response({'error': 'Token is missing user ID'}, status.HTTP_401_UNAUTHORIZED)
-            user = User.objects.get(id=user_id)
-        except Exception as e:
-            return error_response({'error': f'Invalid or expired token: {str(e)}'}, status.HTTP_401_UNAUTHORIZED)
+            decoded = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+            user = User.objects.get(id=decoded.get('user_id'))
+        except:
+            return Response({'error': 'Invalid or expired token'}, status=status.HTTP_401_UNAUTHORIZED)
 
         uploaded_file = request.FILES.get('file')
-        file_name = request.data.get('name')
-        page_id = request.data.get('page_id')  
-
-        if not uploaded_file or not file_name or not page_id:
-            return error_response({'error': 'File, name, and page_id are required :()'}, status.HTTP_400_BAD_REQUEST)
+        raw_name = request.data.get('name')
+        page_id = request.data.get('page_id')
+        if not uploaded_file or not raw_name or not page_id:
+            return Response({'error': 'File, name, and page_id are required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             page = Page.objects.get(id=page_id)
-        except Page.DoesNotExist:
-            return error_response({'error': 'Page not found'}, status.HTTP_400_BAD_REQUEST)
-
-        try:
             business = Business.objects.get(user=user)
+        except Page.DoesNotExist:
+            return Response({'error': 'Page not found'}, status=status.HTTP_400_BAD_REQUEST)
         except Business.DoesNotExist:
-            return error_response({'error': 'Business not found for user'}, status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Business not found for user'}, status=status.HTTP_404_NOT_FOUND)
 
-        business_type_slug = slugify(business.category)
-        business_name = business.name
-        business_id = business.id
-        user_id_str = str(user.id)
+        slug = slugify(business.category)
+        directory = Path('uploads') / slug / str(business.id) / str(user.id)
+        directory.mkdir(parents=True, exist_ok=True)
 
-        user_directory = Path("uploads") / business_type_slug / str(business_id) / user_id_str
-        user_directory.mkdir(parents=True, exist_ok=True)
+        ext = Path(uploaded_file.name).suffix.lower() or f".{uploaded_file.content_type.split('/')[-1]}"
+        ts = datetime.now().strftime('%Y%m%d%H%M%S')
+        base = Path(raw_name).stem
+        filename = f"{ts}_{business.name}_{business.id}_user_{user.id}_{base}{ext}"
 
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        new_filename = f"{timestamp}_{business_name}_{business_id}_{"user_name"}_{user_id_str}_{file_name}"
-        file_path = user_directory / new_filename
-
-        with file_path.open('wb+') as destination:
+        path = directory / filename
+        with path.open('wb+') as f:
             for chunk in uploaded_file.chunks():
-                destination.write(chunk)
+                f.write(chunk)
 
-        file_type = uploaded_file.name.split('.')[-1].lower()
-
-        uploaded_file_record = Upload.objects.create(
-            path=str(file_path),
-            type=file_type,
+        record = Upload.objects.create(
+            path=str(path),
+            type=ext.lstrip('.'),
             uploaded_by=user,
-            name=new_filename,
-            references_page=page  
+            name=filename,
+            references_page=page
         )
         cache.delete(f"summarizer_output_user_{user.id}")
-
-        serializer = UploadSerializer(uploaded_file_record)
-        return error_response(serializer.data, status.HTTP_201_CREATED)
-
+        serializer = UploadSerializer(record)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class FileListView(APIView):
     permission_classes = [permissions.AllowAny]

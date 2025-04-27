@@ -1,6 +1,6 @@
 import requests
 import jwt
-import os
+import json
 import base64
 import concurrent.futures
 import xml.etree.ElementTree as ET
@@ -316,3 +316,17 @@ class TakeScreenshotAPIView(APIView):
                 {"error": f"Failed to take screenshot: {e}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+class QuickChartAPIView(APIView):
+    def get(self, request):
+        config = request.query_params.get('config')
+        if not config:
+            return Response({'error': 'Missing required query parameter: config'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            json.loads(config)
+        except ValueError:
+            return Response({'error': 'Invalid JSON in config'}, status=status.HTTP_400_BAD_REQUEST)
+        resp = requests.get('https://quickchart.io/chart', params={'c': config})
+        if resp.status_code == 200:
+            return HttpResponse(resp.content, content_type='image/png')
+        return Response({'error': 'Chart generation failed'}, status=status.HTTP_502_BAD_GATEWAY)

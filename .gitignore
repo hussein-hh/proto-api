@@ -22,3 +22,5 @@ uploads/
 # migrations
 migrations/
 *migrations/
+
+Records/
