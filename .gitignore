@@ -22,3 +22,12 @@ uploads/
 # migrations
 migrations/
 *migrations/
+
+# files in Records subfolders
+#Records/*/*
+
+# keep the folders themselves
+#!Records/*
+
+# Local helper scripts (macos)
+*.sh
