@@ -395,7 +395,7 @@ class TakeScreenshotAPIView(APIView):
 
         api_url = "https://shot.screenshotapi.net/screenshot"
         params = {
-            "token": "R9M790E-J3XMT8Y-MA30EFT-JEFE9PK",
+            "token": "RPNE9GA-2BP4KTF-JKS2K7Z-RZBR7YK",
             "url": page.url,
             "file_type": "png",
             "full_page": "true",
@@ -441,3 +441,24 @@ class QuickChartAPIView(APIView):
         if resp.status_code == 200:
             return HttpResponse(resp.content, content_type='image/png')
         return Response({'error': 'Chart generation failed'}, status=status.HTTP_502_BAD_GATEWAY)
+    
+
+class UserNameAPIView(APIView):
+    def get(self, request):
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return Response({'error': 'Authorization header is required.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        parts = auth_header.split()
+        if len(parts) != 2 or parts[0].lower() != 'bearer':
+            return Response({'error': 'Authorization header must be in the format: Bearer <token>'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        token = parts[1]
+        user, error = get_user_from_token(token)
+        if error:
+            return Response({'error': error}, status=status.HTTP_401_UNAUTHORIZED)
+
+        return Response({
+            'first_name': user.first_name,
+            'last_name': user.last_name
+        }, status=status.HTTP_200_OK)
