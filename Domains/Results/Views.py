@@ -11,7 +11,7 @@ from django.utils.text import slugify
 from pathlib import Path
 from django.http import HttpResponse
 from rest_framework.response import Response
-from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui, evaluate_uba, generate_chart_configs, formulate_ui
+from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui, evaluate_uba, formulate_ui, web_search_agent, webby_search_agent
 
 executor = ThreadPoolExecutor()
 
@@ -238,111 +238,72 @@ def slugify(text: str) -> str:
     text = re.sub(r"[^\w\s-]", "", text.lower()).strip()
     return re.sub(r"[-\s]+", "-", text) or "chart"
 
-class GenerateChartsAPIView(APIView):
+ 
+class UBAProblemSolutionsAPIView(APIView):
     """
-    1. Ensures UBA evaluation exists, generating it if missing.
-    2. Reads the UBA evaluation text and raw UBA data.
-    3. Extracts multi-line numbered findings, skipping ## comment blocks.
-    4. Calls generate_chart_configs to obtain $<plotly-json> lines.
-    5. Saves each config under Records/plots/<business_id>/<page_id>/<slug>.json
-    6. Returns JSON listing saved paths.
+    GET /api/uba-problem-solutions/?page_id=<page_id>
+    1. Load the stored UBA report for this page_id.
+    2. Extract all "Problem" clauses.
+    3. For each clause, call web_search_agent() to fetch a solution + sources.
+    4. Return a JSON list of { problem, solution } objects.
     """
-
     def get(self, request):
-        page_id = request.query_params.get("page_id")
-        if not page_id:
-            return Response({"error": "page_id missing"}, status=status.HTTP_400_BAD_REQUEST)
+        pid = request.query_params.get("page_id")
+        if not pid:
+            return Response({"error":"page_id missing"}, status=400)
 
-        # ———————————————————————————————————————————  locate Upload
         try:
-            up = Upload.objects.get(references_page__id=page_id)
+            up = Upload.objects.get(references_page_id=pid)
         except Upload.DoesNotExist:
-            return Response({"error": "Upload not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error":"Upload not found"}, status=404)
 
-        business_id = up.references_page.business.id
+        report_path = up.uba_report
+        if not report_path or not os.path.exists(report_path):
+            return Response({"error":"No UBA report found"}, status=404)
 
-        # ———————————————————————————————————————————  (1) create report if absent
-        if not up.uba_report or not Path(up.uba_report).exists():
+        with open(report_path, encoding="utf-8") as f:
+            data = json.load(f)
+        report_text = data.get("report", "")
+
+        # grab every "1 - Problem:" block
+        problems = re.findall(
+            r"(?m)^\s*1\s*-\s*Problem[:;]\s*(.+?)(?=\n\s*\d+\s*-\s*(?:Problem|Analysis|Solution)|\Z)",
+            report_text
+        )
+        if not problems:
+            return Response({"error":"No problem clauses found in report"}, status=400)
+
+        results = []
+        for clause in problems:
             try:
-                report_text   = evaluate_uba(up.path)                   # your agent
-                folder_uba    = Path("Records", "UBA-REPORTS", str(business_id), str(page_id))
-                folder_uba.mkdir(parents=True, exist_ok=True)
-                report_path   = folder_uba / "uba_report.json"
-                report_path.write_text(json.dumps({"report": report_text}, ensure_ascii=False, indent=2), encoding="utf-8")
-                up.uba_report = str(report_path)
-                up.save()
-            except Exception as exc:
-                return Response({"error": f"Error generating UBA report: {exc}"},
-                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                sol = web_search_agent(clause)
+            except Exception as e:
+                sol = f"Error during web search: {e}"
+            results.append({"problem": clause, "solution": sol})
 
-        # ———————————————————————————————————————————  (2) load report text
+        # Set the content type to indicate HTML content in the response
+        response = Response({"results": results}, status=200)
+        response['Content-Type'] = 'application/json; charset=utf-8'
+        response['X-Contains-HTML'] = 'true'
+        
+        return response
+
+
+class WebSearchAPIView(APIView):
+    """
+    GET /ask-ai/search/?q=<your query>
+    Returns JSON: { query: "...", answer: "<html-ified answer>" }
+    """
+    def get(self, request):
+        q = request.query_params.get("q")
+        if not q:
+            return Response({"error": "missing 'q' parameter"},
+                            status=status.HTTP_400_BAD_REQUEST)
         try:
-            evaluation_text = json.loads(Path(up.uba_report).read_text(encoding="utf-8"))["report"]
-        except Exception as exc:
-            return Response({"error": f"Cannot load UBA report: {exc}"},
+            answer = webby_search_agent(q)
+        except Exception as e:
+            return Response({"error": str(e)},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # ———————————————————————————————————————————  (3) extract findings
-        observations, current = [], None
-        for raw in evaluation_text.splitlines():
-            line = raw.strip()
-
-            if not line or line.lower().startswith("findings:"):
-                continue                                    # skip header / blank lines
-            if line.startswith("##"):
-                continue                                    # skip analyst comments
-
-            bullet = BULLET_BLOCK_RE.match(line)
-            if bullet:                                     # new numbered finding
-                if current:
-                    observations.append(current.strip())
-                current = bullet.group(2)
-            elif current is not None:                      # continuation of current finding
-                current += " " + line
-        if current:
-            observations.append(current.strip())
-
-        if not observations:
-            return Response({"error": "No numbered findings detected"},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # ———————————————————————————————————————————  (4) load raw UBA data (csv or json)
-        try:
-            if up.path.lower().endswith(".csv"):
-                with open(up.path, newline="", encoding="utf-8") as fh:
-                    uba_json_str = json.dumps(list(csv.DictReader(fh)))
-            else:
-                uba_json_str = Path(up.path).read_text(encoding="utf-8")
-        except Exception as exc:
-            return Response({"error": f"Cannot load UBA data: {exc}"},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # ———————————————————————————————————————————  (5) ask LLM for Plotly configs
-        raw_configs  = generate_chart_configs(evaluation_text, uba_json_str)
-        config_lines = [m.group(1) for m in (CONFIG_LINE_RE.match(l.strip()) for l in raw_configs.splitlines()) if m]
-
-        if not config_lines:
-            return Response({"error": "No Plotly configs produced", "raw": raw_configs},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # ———————————————————————————————————————————  (6) save <finding> ↔ <config>
-        folder_out = Path("Records", "plots", str(business_id), str(page_id))
-        folder_out.mkdir(parents=True, exist_ok=True)
-
-        saved = []
-        for obs, cfg in zip(observations, config_lines):
-            try:
-                json.loads(cfg)                                     # validate JSON
-            except ValueError:
-                continue
-
-            slug      = slugify(" ".join(obs.split()[:5]))
-            file_path = folder_out / f"{slug}.json"
-            file_path.write_text(cfg, encoding="utf-8")
-            saved.append(str(file_path))
-
-        if not saved:
-            return Response({"error": "Valid configs not saved"},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        return Response({"configs_saved": saved}, status=status.HTTP_200_OK)
+        return Response({"query": q, "answer": answer},
+                        status=status.HTTP_200_OK)

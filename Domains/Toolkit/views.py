@@ -501,3 +501,5 @@ class ListChartConfigsAPIView(APIView):
                 continue
 
         return Response({"configs": configs}, status=status.HTTP_200_OK)
+    
+

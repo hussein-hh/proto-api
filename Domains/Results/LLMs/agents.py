@@ -3,6 +3,7 @@ import os, json, csv
 from dotenv import load_dotenv
 from openai import OpenAI
 import Domains.Results.LLMs.prompts as prompts 
+import re  # Add import for regex
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -104,24 +105,50 @@ def evaluate_uba(uba_path):
         {"role":"user","content":content},
     ]
     resp = client.chat.completions.create(
-        model="gpt-4.1-mini", messages=msgs, temperature=temp, max_tokens=max_tok
+        model="o3-mini-2025-01-31", messages=msgs, #temperature=temp, #max_tokens=max_tok
     )
     return resp.choices[0].message.content
 
-def generate_chart_configs(observations: str, uba_json: str) -> str:
-    user_prompt = prompts.chart_config_user_template \
-        .replace("{OBS}", observations) \
-        .replace("{UBA}", uba_json)
 
-    msgs = [
-        {"role": "system", "content": prompts.chart_config_system_message},
-        {"role": "user",   "content": user_prompt},
-    ]
 
-    resp = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=msgs,
-        temperature=temp,
-        max_tokens=max_tok,
+def web_search_agent(problem: str) -> str:
+    """
+    Use GPT-4o-mini with the web_search tool to find solutions for the given problem.
+    Returns a concise answer with source citations.
+    """
+    
+    resp = client.responses.create(
+        model="gpt-4o-mini",
+        instructions=prompts.web_search_system_message,
+        input=prompts.web_search_prompt.format(query=problem),
+        tools=[{"type": "web_search"}]
     )
-    return resp.choices[0].message.content.strip()
+    
+    # Convert Markdown links to HTML links to make them clickable in the response
+    output_text = resp.output_text
+    # Convert markdown links [text](url) to HTML links <a href="url">text</a>
+    output_text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2" target="_blank">\1</a>', output_text)
+    
+    return output_text
+
+def webby_search_agent(query: str) -> str:
+    """
+    Uses GPT-4o-mini plus the web_search tool to answer any internet query.
+    Returns HTML-ified output with <a> links.
+    """
+    resp = client.responses.create(
+        model="gpt-4o-mini",
+        instructions=prompts.WEBBY_SEARCH_SYSTEM_MESSAGE,
+        input=prompts.WEBBY_SEARCH_PROMPT.format(query=query.strip()),
+        tools=[{"type": "web_search"}],
+        # temperature=0.2,
+        # max_tokens=700,
+    )
+
+    # convert Markdown links to HTML links
+    output = resp.output_text or ""
+    return re.sub(
+        r'\[([^\]]+)\]\(([^)]+)\)',
+        r'<a href="\2" target="_blank">\1</a>',
+        output
+    ).strip()
