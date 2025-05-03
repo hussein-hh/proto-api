@@ -23,7 +23,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from pathlib import Path
-from Domains.Onboard.models import Business, Page
+from Domains.Onboard.models import Business, Page, RoleModelPage
 
 User = get_user_model()
 
@@ -122,39 +122,35 @@ class RoleModelWebMetricsAPIView(APIView):
             return Response({"error": "Page not found for the given page_id"},
                             status=status.HTTP_404_NOT_FOUND)
 
-        if not page.business:
+        if not getattr(page, 'business', None):
             return Response({"error": "Page is not associated with any business."},
                             status=status.HTTP_400_BAD_REQUEST)
-
         business = page.business
 
-        if not business.role_model:
+        role_model = getattr(business, 'role_model', None)
+        if not role_model:
             return Response({"error": "Business does not have an associated role model."},
                             status=status.HTTP_404_NOT_FOUND)
 
-        role_model = business.role_model
         page_type = page.page_type
 
-        if page_type == "Landing Page":
-            role_model_url = role_model.landing_page
-        elif page_type == "Search Results Page":
-            role_model_url = role_model.results_page
-        elif page_type == "Product Page":
-            role_model_url = role_model.product_page
-        else:
-            return Response({"error": "Unknown page type."},
-                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            rm_page = RoleModelPage.objects.get(role_model=role_model, page_type=page_type)
+        except RoleModelPage.DoesNotExist:
+            return Response({"error": f"No URL configured for '{page_type}' in role model pages."},
+                            status=status.HTTP_404_NOT_FOUND)
 
+        role_model_url = getattr(rm_page, 'url', None)
         if not role_model_url:
-            return Response({"error": f"No URL configured for {page_type} in the role model."},
+            return Response({"error": f"No URL set on RoleModelPage for '{page_type}'."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future_metrics = executor.submit(get_web_performance, role_model_url)
-            metrics_result = future_metrics.result()
+        # direct call—no threading
+        metrics_result = get_web_performance(role_model_url)
 
         response_key = f"{role_model.name} {page_type} metrics"
         return Response({response_key: metrics_result}, status=status.HTTP_200_OK)
+
 
 class PageHTMLAPIView(APIView):
     def _build_dom_outline(self, soup, text_limit=50):
