@@ -227,7 +227,7 @@ class GenerateChartsAPIView(APIView):
     2. Reads the UBA evaluation text and raw UBA data.
     3. Parses numbered observations.
     4. Calls generate_chart_configs to get multiple $<config> lines.
-    5. Saves each chart under Records/plots/<business_id>/<page_id>/<descriptive-name>.png.
+    5. Saves each config under Records/plots/<business_id>/<page_id>/<descriptive-name>.json.
     6. Returns JSON with saved file paths.
     """
     def get(self, request):
@@ -242,7 +242,7 @@ class GenerateChartsAPIView(APIView):
 
         business_id = up.references_page.business.id
 
-        # Generate UBA report if missing
+        # 1. Generate UBA report if missing
         if not up.uba_report or not Path(up.uba_report).exists():
             try:
                 report_text = evaluate_uba(up.path)
@@ -254,19 +254,25 @@ class GenerateChartsAPIView(APIView):
                 up.uba_report = str(report_path)
                 up.save()
             except Exception as e:
-                return Response({"error": f"Error generating UBA report: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                return Response({"error": f"Error generating UBA report: {e}"},
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Load evaluation report
+        # 2. Load evaluation report
         try:
             with open(up.uba_report, encoding="utf-8") as f:
                 evaluation_text = json.load(f)["report"]
         except Exception as e:
-            return Response({"error": f"Cannot load UBA report: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": f"Cannot load UBA report: {e}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Parse observations
-        observations = [m.group(1) for m in (BULLET_REGEX.match(line) for line in evaluation_text.splitlines()) if m]
+        # 3. Parse observations
+        observations = [
+            m.group(1)
+            for m in (BULLET_REGEX.match(line) for line in evaluation_text.splitlines())
+            if m
+        ]
 
-        # Load raw UBA data
+        # 4. Load raw UBA data
         try:
             if up.path.lower().endswith(".csv"):
                 with open(up.path, newline="", encoding="utf-8") as f:
@@ -275,15 +281,21 @@ class GenerateChartsAPIView(APIView):
             else:
                 uba_json_str = Path(up.path).read_text(encoding="utf-8")
         except Exception as e:
-            return Response({"error": f"Cannot load UBA data: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": f"Cannot load UBA data: {e}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Generate chart configs
+        # 5. Generate chart configs
         raw_configs = generate_chart_configs(evaluation_text, uba_json_str)
-        config_lines = [m.group(1) for m in (CONFIG_REGEX.match(line.strip()) for line in raw_configs.splitlines()) if m]
+        config_lines = [
+            m.group(1)
+            for m in (CONFIG_REGEX.match(line.strip()) for line in raw_configs.splitlines())
+            if m
+        ]
         if not config_lines:
-            return Response({"error": "No configs produced", "raw": raw_configs}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": "No configs produced", "raw": raw_configs},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Save charts
+        # 6. Save configs as JSON files
         out_folder = Path("Records") / "plots" / str(business_id) / str(page_id)
         out_folder.mkdir(parents=True, exist_ok=True)
 
@@ -293,18 +305,14 @@ class GenerateChartsAPIView(APIView):
                 json.loads(cfg)
             except ValueError:
                 continue
-            slug = slugify(" ".join(obs.split()[:5])) or 'chart'
-            file_path = out_folder / f"{slug}.png"
-            resp = requests.get(
-                "http://127.0.0.1:8000/toolkit/plot-chart/",
-                params={"config": cfg}
-            )
-            if resp.status_code != 200:
-                continue
-            file_path.write_bytes(resp.content)
+
+            slug = slugify(" ".join(obs.split()[:5])) or "chart"
+            file_path = out_folder / f"{slug}.json"
+            file_path.write_text(cfg, encoding="utf-8")
             stored.append(str(file_path))
 
         if not stored:
-            return Response({"error": "All chart requests failed"}, status=status.HTTP_502_BAD_GATEWAY)
+            return Response({"error": "No configs saved"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        return Response({"charts_saved": stored}, status=status.HTTP_200_OK)
+        return Response({"configs_saved": stored}, status=status.HTTP_200_OK)

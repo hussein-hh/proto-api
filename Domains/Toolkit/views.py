@@ -22,8 +22,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
-
+from pathlib import Path
 from Domains.Onboard.models import Business, Page
 
 User = get_user_model()
@@ -462,3 +461,47 @@ class UserNameAPIView(APIView):
             'first_name': user.first_name,
             'last_name': user.last_name
         }, status=status.HTTP_200_OK)
+    
+class ListChartConfigsAPIView(APIView):
+    """
+    GET /toolkit/list-plots/<page_id>/
+    or
+    GET /toolkit/list-chart-configs/?page_id=<page_id>
+    """
+    def get(self, request, page_id=None):
+        # if it wasn’t provided in the URL, grab from querystring
+        if page_id is None:
+            page_id = request.query_params.get("page_id")
+        if not page_id:
+            return Response(
+                {"error": "Missing required parameter: page_id"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # look up the Page
+        try:
+            page = Page.objects.get(id=page_id)
+        except Page.DoesNotExist:
+            return Response(
+                {"error": "Page not found for given page_id"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        biz_id = page.business.id
+        folder = Path("Records") / "plots" / str(biz_id) / str(page_id)
+
+        if not folder.exists():
+            return Response({"configs": []}, status=status.HTTP_200_OK)
+
+        configs = []
+        for fn in folder.glob("*.json"):
+            try:
+                cfg = json.loads(fn.read_text(encoding="utf-8"))
+                configs.append({
+                    "slug": fn.stem,
+                    "config": cfg
+                })
+            except Exception:
+                continue
+
+        return Response({"configs": configs}, status=status.HTTP_200_OK)

@@ -1,5 +1,5 @@
 # agents.py
-import os, json
+import os, json, csv
 from dotenv import load_dotenv
 from openai import OpenAI
 import Domains.Results.LLMs.prompts as prompts 
@@ -20,7 +20,7 @@ def describe_structure(image_b64, html_json, css_json):
         {"role":"user","content":content},
     ]
     resp = client.chat.completions.create(
-        model="gpt-4.1-2025-04-14", messages=msgs, temperature=temp, max_tokens=max_tok
+        model="gpt-4.1-mini-2025-04-14", messages=msgs, temperature=temp, max_tokens=max_tok
     )
     return resp.choices[0].message.content
 
@@ -36,7 +36,7 @@ def describe_styling(image_b64, html_json, css_json):
         {"role":"user","content":content},
     ]
     resp = client.chat.completions.create(
-        model="gpt-4o", messages=msgs, temperature=temp, max_tokens=max_tok
+        model="gpt-4.1-mini", messages=msgs, temperature=temp, max_tokens=max_tok
     )
     return resp.choices[0].message.content
 
@@ -52,19 +52,19 @@ def evaluate_ui(
 ) -> str:
 
     content = [
-        {"type": "text", "text": prompts.evaluate_prompt},
+        {"type": "text", "text": prompts.evaluator_prompt},
         {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{screenshot_b64}"}},
         {"type": "text", "text": json.dumps(ui_report)},
         {"type": "text", "text": f"Business type: {business_type}"},
         {"type": "text", "text": f"Page type: {page_type}"},
     ]
     msgs = [
-        {"role": "system", "content": prompts.evaluate_system_message},
+        {"role": "system", "content": prompts.evaluator_system_message},
         {"role": "user",   "content": content},
     ]
 
     resp = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4.1-mini",
         messages=msgs,
         temperature=temp,
         max_tokens=max_tok,
@@ -81,12 +81,10 @@ def formulate_ui(evaluation_json: dict) -> str:
         {"role": "user",   "content": content},
     ]
     resp = client.chat.completions.create(
-        model="gpt-4o", messages=msgs, temperature=temp, max_tokens=max_tok
+        model="gpt-4.1-mini", messages=msgs, temperature=temp, max_tokens=max_tok
     )
     return resp.choices[0].message.content
 
-
-import os, json, csv
 
 def evaluate_uba(uba_path):
     # load UBA as JSON or CSV
@@ -98,15 +96,15 @@ def evaluate_uba(uba_path):
 
     # build your LLM payload exactly as before
     content = [
-        {"type":"text","text":prompts.evaluate_prompt},
+        {"type":"text","text":prompts.uba_evaluate_prompt},
         {"type":"text","text":json.dumps(uba)},
     ]
     msgs = [
-        {"role":"system","content":prompts.evaluate_system_message},
+        {"role":"system","content":prompts.uba_evaluate_system_message},
         {"role":"user","content":content},
     ]
     resp = client.chat.completions.create(
-        model="gpt-4o", messages=msgs, temperature=temp, max_tokens=max_tok
+        model="gpt-4.1-mini", messages=msgs, temperature=temp, max_tokens=max_tok
     )
     return resp.choices[0].message.content
 
@@ -121,7 +119,7 @@ def generate_chart_configs(observations: str, uba_json: str) -> str:
     ]
 
     resp = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4.1-mini",
         messages=msgs,
         temperature=temp,
         max_tokens=max_tok,
