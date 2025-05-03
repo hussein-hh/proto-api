@@ -88,26 +88,40 @@ def formulate_ui(evaluation_json: dict) -> str:
 
 
 def evaluate_uba(uba_path):
-    # load UBA as JSON or CSV
+    # 1. Load the UBA file
     if uba_path.lower().endswith(".csv"):
         with open(uba_path, newline="", encoding="utf-8") as f:
             uba = list(csv.DictReader(f))
     else:
-        uba = json.load(open(uba_path, "r", encoding="utf-8"))
+        with open(uba_path, "r", encoding="utf-8") as f:
+            uba = json.load(f)
 
-    # build your LLM payload exactly as before
+    # 2. Build LLM payload
     content = [
-        {"type":"text","text":prompts.uba_evaluator_prompt},
-        {"type":"text","text":json.dumps(uba)},
+        {"type": "text", "text": prompts.uba_evaluate_prompt},
+        {"type": "text", "text": json.dumps(uba)},
     ]
-    msgs = [
-        {"role":"system","content":prompts.uba_evaluator_system_message},
-        {"role":"user","content":content},
+    messages = [
+        {"role": "system", "content": prompts.uba_evaluate_system_message},
+        {"role": "user", "content": content},
     ]
+
+    # 3. Call the model
     resp = client.chat.completions.create(
-        model="o3-mini-2025-01-31", messages=msgs, #temperature=temp, #max_tokens=max_tok
+        model="o3-mini-2025-01-31",
+        messages=messages,
     )
-    return resp.choices[0].message.content
+
+    # 4. Extract the raw string (not the method!)
+    report_str = resp.choices[0].message.content
+
+    # 5. If it’s JSON, parse it; otherwise leave as string
+    try:
+        report = json.loads(report_str)
+    except (json.JSONDecodeError, TypeError):
+        report = report_str
+
+    return report
 
 def generate_chart_configs(observations: str, uba_json: str) -> str:
     user_prompt = prompts.uba_plotter_prompt \
@@ -119,19 +133,24 @@ def generate_chart_configs(observations: str, uba_json: str) -> str:
         {"role": "user",   "content": user_prompt},
     ]
 
-def web_search_agent(problem: str) -> str:
+
+def web_search_agent(problem: str) -> list[dict]:
     """
-    Use GPT-4o-mini with the web_search tool to find solutions for the given problem.
-    Returns a concise answer with source citations.
+    Takes a single UBA 'problem' string.
+    Returns a list of {source, summary} dicts.
     """
-    
-    resp = client.responses.create(
-        model="gpt-4o-mini",
-        instructions=prompts.web_search_system_message,
-        input=prompts.web_search_prompt.format(query=problem),
-        tools=[{"type": "web_search"}]
+    resp = client.chat.completions.create(
+        model="o3-mini-2025-01-31",          # browsing-enabled o-series model
+        messages=[
+            {"role": "system", "content": prompts.web_search_system_message},
+            {"role": "user",   "content": problem}
+        ],
+        response_format={"type": "json_object"}   # ← forces pure JSON
     )
-    return resp.choices[0].message.content.strip()
+    # The model must reply with a JSON string; parse it.
+    payload = json.loads(resp.choices[0].message.content)
+    return payload.get("resources", [])
+
 
 def evaluate_web_metrics(raw_metrics: dict) -> str:
     """

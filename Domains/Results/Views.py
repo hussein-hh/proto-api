@@ -11,7 +11,7 @@ from django.utils.text import slugify
 from pathlib import Path
 from django.http import HttpResponse
 from rest_framework.response import Response
-from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui, evaluate_uba, generate_chart_configs, formulate_ui, evaluate_web_metrics
+from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui, evaluate_uba, formulate_ui, evaluate_web_metrics, web_search_agent
 
 
 executor = ThreadPoolExecutor()
@@ -239,74 +239,49 @@ def slugify(text: str) -> str:
     text = re.sub(r"[^\w\s-]", "", text.lower()).strip()
     return re.sub(r"[-\s]+", "-", text) or "chart"
 
- 
+
+PROBLEM_RE = re.compile(
+    r"(?m)^\s*1\s*-\s*Problem[:;]\s*(.+?)(?=\n\s*\d+\s*-\s*(?:Problem|Analysis|Solution)|\Z)"
+)
+
 class UBAProblemSolutionsAPIView(APIView):
     """
     GET /api/uba-problem-solutions/?page_id=<page_id>
-    1. Load the stored UBA report for this page_id.
-    2. Extract all "Problem" clauses.
-    3. For each clause, call web_search_agent() to fetch a solution + sources.
-    4. Return a JSON list of { problem, solution } objects.
     """
     def get(self, request):
         pid = request.query_params.get("page_id")
         if not pid:
-            return Response({"error":"page_id missing"}, status=400)
+            return Response({"error": "page_id missing"}, status=400)
 
         try:
             up = Upload.objects.get(references_page_id=pid)
         except Upload.DoesNotExist:
-            return Response({"error":"Upload not found"}, status=404)
+            return Response({"error": "Upload not found"}, status=404)
 
-        report_path = up.uba_report
-        if not report_path or not os.path.exists(report_path):
-            return Response({"error":"No UBA report found"}, status=404)
+        if not up.uba_report or not os.path.exists(up.uba_report):
+            return Response({"error": "No UBA report found"}, status=404)
 
-        with open(report_path, encoding="utf-8") as f:
-            data = json.load(f)
-        report_text = data.get("report", "")
+        with open(up.uba_report, encoding="utf-8") as f:
+            report_text = json.load(f).get("report", "")
 
-        # grab every "1 - Problem:" block
-        problems = re.findall(
-            r"(?m)^\s*1\s*-\s*Problem[:;]\s*(.+?)(?=\n\s*\d+\s*-\s*(?:Problem|Analysis|Solution)|\Z)",
-            report_text
-        )
+        problems = PROBLEM_RE.findall(report_text)
         if not problems:
-            return Response({"error":"No problem clauses found in report"}, status=400)
+            return Response({"error": "No problem clauses found"}, status=400)
 
         results = []
         for clause in problems:
             try:
-                sol = web_search_agent(clause)
+                resources = web_search_agent(clause.strip())
             except Exception as e:
-                sol = f"Error during web search: {e}"
-            results.append({"problem": clause, "solution": sol})
+                resources = [{"source": None, "summary": f"agent error: {e}"}]
 
-        # Set the content type to indicate HTML content in the response
-        response = Response({"results": results}, status=200)
-        response['Content-Type'] = 'application/json; charset=utf-8'
-        response['X-Contains-HTML'] = 'true'
-        
-        return response
+            results.append({
+                "problem": clause.strip(),
+                "solutions": resources
+            })
 
+        return Response({"results": results}, status=200)
 
-class WebSearchAPIView(APIView):
-    """
-    GET /ask-ai/search/?q=<your query>
-    Returns JSON: { query: "...", answer: "<html-ified answer>" }
-    """
-    def get(self, request):
-        q = request.query_params.get("q")
-        if not q:
-            return Response({"error": "missing 'q' parameter"},
-                            status=status.HTTP_400_BAD_REQUEST)
-        try:
-            answer = webby_search_agent(q)
-        except Exception as e:
-            return Response({"error": str(e)},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        return Response({"configs_saved": saved}, status=status.HTTP_200_OK)
 
 class EvaluateWebMetricsAPIView(APIView):
     """
