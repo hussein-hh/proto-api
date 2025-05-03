@@ -11,7 +11,7 @@ from django.utils.text import slugify
 from pathlib import Path
 from django.http import HttpResponse
 from rest_framework.response import Response
-from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui, evaluate_uba, generate_chart_configs, formulate_ui
+from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui, evaluate_uba, generate_chart_configs, formulate_ui, evaluate_web_metrics
 
 executor = ThreadPoolExecutor()
 
@@ -346,3 +346,58 @@ class GenerateChartsAPIView(APIView):
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({"configs_saved": saved}, status=status.HTTP_200_OK)
+
+class EvaluateWebMetricsAPIView(APIView):
+    """
+    1. Fetches Core Web Vitals for a given page via your web‐metrics endpoint.
+    2. Runs the WebMetricsAdvisor agent to produce recommendations.
+    3. Persists the JSON report on disk and in the Upload record.
+    """
+    def get(self, request):
+        pid = request.query_params.get("page_id")
+        if not pid:
+            return Response({"error": "page_id missing"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # — Locate Page
+        try:
+            page = Page.objects.get(id=pid)
+        except Page.DoesNotExist:
+            return Response({"error": "Page not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # — Locate Upload record for this page
+        try:
+            up = Upload.objects.get(references_page=page)
+        except Upload.DoesNotExist:
+            return Response({"error": "Upload record not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # — Extract JWT
+        jwt_token = request.headers.get("Authorization", "").replace("Bearer ", "")
+        if not jwt_token:
+            return Response({"error": "Authorization token missing"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        # — Call the agent
+        try:
+            result_text = evaluate_web_metrics(page_id=pid, jwt_token=jwt_token)
+            result_json = json.loads(result_text)
+        except Exception as e:
+            return Response({"error": f"Evaluation failed: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # — Save to disk and Upload record
+        try:
+            business_id = str(page.business.id)
+            folder = os.path.join("Records", "WEB-METRICS-REPORTS", business_id, pid)
+            os.makedirs(folder, exist_ok=True)
+
+            file_path = os.path.join(folder, "web_metrics_report.json")
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(result_json, f, ensure_ascii=False, indent=2)
+
+            up.web_metrics_report = file_path
+            up.save()
+        except Exception as e:
+            return Response({"error": f"Saving report failed: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response(
+            {"web_metrics_report": result_json, "saved_path": file_path},
+            status=status.HTTP_200_OK
+        )
