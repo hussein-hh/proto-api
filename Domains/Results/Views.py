@@ -11,7 +11,8 @@ from django.utils.text import slugify
 from pathlib import Path
 from django.http import HttpResponse
 from rest_framework.response import Response
-from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui, evaluate_uba, formulate_ui, web_search_agent, webby_search_agent
+from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui, evaluate_uba, generate_chart_configs, formulate_ui, evaluate_web_metrics
+
 
 executor = ThreadPoolExecutor()
 
@@ -305,5 +306,42 @@ class WebSearchAPIView(APIView):
             return Response({"error": str(e)},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        return Response({"query": q, "answer": answer},
-                        status=status.HTTP_200_OK)
+        return Response({"configs_saved": saved}, status=status.HTTP_200_OK)
+
+class EvaluateWebMetricsAPIView(APIView):
+    """
+    Accepts JSON body of the form:
+    {
+      "Some Page metrics": {
+        "First Contentful Paint": "1.2 s",
+        "Speed Index": "12.8 s",
+        "Largest Contentful Paint (LCP)": "27.1 s",
+        "Time to Interactive": "28.2 s",
+        "Total Blocking Time (TBT)": "390 ms",
+        "Cumulative Layout Shift (CLS)": "0"
+      }
+    }
+    Returns the WebMetricsAdvisor JSON.
+    """
+    def post(self, request):
+        # grab the only metrics object in the body
+        try:
+            raw_metrics = next(iter(request.data.values()))
+            if not isinstance(raw_metrics, dict):
+                raise ValueError
+        except Exception:
+            return Response(
+                {"error": "Invalid format: send one top-level key with a metrics dict"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            result_text = evaluate_web_metrics(raw_metrics)
+            result_json = json.loads(result_text)
+        except Exception as e:
+            return Response(
+                {"error": f"Evaluation failed: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        return Response({"web_metrics_report": result_json}, status=status.HTTP_200_OK)

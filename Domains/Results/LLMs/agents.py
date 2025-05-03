@@ -11,13 +11,13 @@ temp, max_tok = 0.1, 500
 
 def describe_structure(image_b64, html_json, css_json):
     content = [
-        {"type":"text","text":prompts.structure_prompt},
+        {"type":"text","text":prompts.ui_structure_prompt},
         {"type":"image_url","image_url":{"url":f"data:image/png;base64,{image_b64}"}},
         {"type":"text","text":json.dumps(html_json)},
         {"type":"text","text":json.dumps(css_json)},
     ]
     msgs = [
-        {"role":"system","content":prompts.structure_system_message},
+        {"role":"system","content":prompts.ui_structure_system_message},
         {"role":"user","content":content},
     ]
     resp = client.chat.completions.create(
@@ -27,13 +27,13 @@ def describe_structure(image_b64, html_json, css_json):
 
 def describe_styling(image_b64, html_json, css_json):
     content = [
-        {"type":"text","text":prompts.styling_prompt},
+        {"type":"text","text":prompts.ui_styling_prompt},
         {"type":"image_url","image_url":{"url":f"data:image/png;base64,{image_b64}"}},
         {"type":"text","text":json.dumps(html_json)},
         {"type":"text","text":json.dumps(css_json)},
     ]
     msgs = [
-        {"role":"system","content":prompts.styling_system_message},
+        {"role":"system","content":prompts.ui_styling_system_message},
         {"role":"user","content":content},
     ]
     resp = client.chat.completions.create(
@@ -53,14 +53,14 @@ def evaluate_ui(
 ) -> str:
 
     content = [
-        {"type": "text", "text": prompts.evaluator_prompt},
+        {"type": "text", "text": prompts.ui_evaluator_prompt},
         {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{screenshot_b64}"}},
         {"type": "text", "text": json.dumps(ui_report)},
         {"type": "text", "text": f"Business type: {business_type}"},
         {"type": "text", "text": f"Page type: {page_type}"},
     ]
     msgs = [
-        {"role": "system", "content": prompts.evaluator_system_message},
+        {"role": "system", "content": prompts.ui_evaluator_system_message},
         {"role": "user",   "content": content},
     ]
 
@@ -74,11 +74,11 @@ def evaluate_ui(
 
 def formulate_ui(evaluation_json: dict) -> str:
     content = [
-        {"type": "text", "text": prompts.formulator_prompt},
+        {"type": "text", "text": prompts.ui_formulator_prompt},
         {"type": "text", "text": json.dumps(evaluation_json)},
     ]
     msgs = [
-        {"role": "system", "content": prompts.formulator_system_message},
+        {"role": "system", "content": prompts.ui_formulator_system_message},
         {"role": "user",   "content": content},
     ]
     resp = client.chat.completions.create(
@@ -97,11 +97,11 @@ def evaluate_uba(uba_path):
 
     # build your LLM payload exactly as before
     content = [
-        {"type":"text","text":prompts.uba_evaluate_prompt},
+        {"type":"text","text":prompts.uba_evaluator_prompt},
         {"type":"text","text":json.dumps(uba)},
     ]
     msgs = [
-        {"role":"system","content":prompts.uba_evaluate_system_message},
+        {"role":"system","content":prompts.uba_evaluator_system_message},
         {"role":"user","content":content},
     ]
     resp = client.chat.completions.create(
@@ -109,7 +109,15 @@ def evaluate_uba(uba_path):
     )
     return resp.choices[0].message.content
 
+def generate_chart_configs(observations: str, uba_json: str) -> str:
+    user_prompt = prompts.uba_plotter_prompt \
+        .replace("{OBS}", observations) \
+        .replace("{UBA}", uba_json)
 
+    msgs = [
+        {"role": "system", "content": prompts.uba_plotter_system_message},
+        {"role": "user",   "content": user_prompt},
+    ]
 
 def web_search_agent(problem: str) -> str:
     """
@@ -123,6 +131,58 @@ def web_search_agent(problem: str) -> str:
         input=prompts.web_search_prompt.format(query=problem),
         tools=[{"type": "web_search"}]
     )
+    return resp.choices[0].message.content.strip()
+
+def evaluate_web_metrics(raw_metrics: dict) -> str:
+    """
+    1. Parse input metrics (strings like "1.2 s", "390 ms", etc.)
+    2. Call OpenAI agent to evaluate.
+    3. Return the LLM's JSON string.
+    """
+    def _parse(val: str) -> float:
+        v = val.replace(",", "").strip()
+        if v.endswith("ms"): return float(v[:-2]) / 1000
+        if v.endswith("s"):  return float(v[:-1])
+        return float(v)
+
+    # Cleaned numeric metrics
+    cleaned = { 
+        # normalize key names to match prompt expectations:
+        # e.g. "First Contentful Paint" -> "FCP"
+        # feel free to adjust mapping if you renamed metrics
+        {"First Contentful Paint": "FCP",
+         "Speed Index":             "SI",
+         "Largest Contentful Paint (LCP)": "LCP",
+         "Time to Interactive":     "TTI",
+         "Total Blocking Time (TBT)":  "TBT",
+         "Cumulative Layout Shift (CLS)": "CLS"
+        }[k]: _parse(v)
+        for k, v in raw_metrics.items()
+        if k in {
+            "First Contentful Paint",
+            "Speed Index",
+            "Largest Contentful Paint (LCP)",
+            "Time to Interactive",
+            "Total Blocking Time (TBT)",
+            "Cumulative Layout Shift (CLS)"
+        }
+    }
+
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    messages = [
+        {"role": "system", "content": prompts.web_metrics_evaluator_system_message},
+        {"role": "user",   "content": [
+            {"type": "text", "text": prompts.web_metrics_evaluator_prompt},
+            {"type": "text", "text": json.dumps({"web_metrics": cleaned})}
+        ]}
+    ]
+    resp = client.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=messages,
+        temperature=0.2,
+        max_tokens=700
+    )
+    return resp.choices[0].message.content
     
     # Convert Markdown links to HTML links to make them clickable in the response
     output_text = resp.output_text
@@ -131,24 +191,3 @@ def web_search_agent(problem: str) -> str:
     
     return output_text
 
-def webby_search_agent(query: str) -> str:
-    """
-    Uses GPT-4o-mini plus the web_search tool to answer any internet query.
-    Returns HTML-ified output with <a> links.
-    """
-    resp = client.responses.create(
-        model="gpt-4o-mini",
-        instructions=prompts.WEBBY_SEARCH_SYSTEM_MESSAGE,
-        input=prompts.WEBBY_SEARCH_PROMPT.format(query=query.strip()),
-        tools=[{"type": "web_search"}],
-        # temperature=0.2,
-        # max_tokens=700,
-    )
-
-    # convert Markdown links to HTML links
-    output = resp.output_text or ""
-    return re.sub(
-        r'\[([^\]]+)\]\(([^)]+)\)',
-        r'<a href="\2" target="_blank">\1</a>',
-        output
-    ).strip()
