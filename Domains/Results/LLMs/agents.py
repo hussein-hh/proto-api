@@ -52,7 +52,7 @@ def evaluate_ui(
 ) -> str:
 
     content = [
-        {"type": "text", "text": prompts.evaluator_prompt},
+        {"type": "text", "text": prompts.ui_evaluator_prompt},
         {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{screenshot_b64}"}},
         {"type": "text", "text": json.dumps(ui_report)},
         {"type": "text", "text": f"Business type: {business_type}"},
@@ -104,7 +104,7 @@ def evaluate_uba(uba_path):
         {"role":"user","content":content},
     ]
     resp = client.chat.completions.create(
-        model="gpt-4.1-mini", messages=msgs, temperatuere=temp, max_tokens=max_tok
+        model="gpt-4.1-mini", messages=msgs, temperature=temp, max_tokens=max_tok
     )
     return resp.choices[0].message.content
 
@@ -126,59 +126,53 @@ def generate_chart_configs(observations: str, uba_json: str) -> str:
     )
     return resp.choices[0].message.content.strip()
 
-import re
-import requests
-from openai import OpenAI
+def evaluate_web_metrics(raw_metrics: dict) -> str:
+    """
+    1. Parse input metrics (strings like "1.2 s", "390 ms", etc.)
+    2. Call OpenAI agent to evaluate.
+    3. Return the LLM's JSON string.
+    """
+    def _parse(val: str) -> float:
+        v = val.replace(",", "").strip()
+        if v.endswith("ms"): return float(v[:-2]) / 1000
+        if v.endswith("s"):  return float(v[:-1])
+        return float(v)
 
-def evaluate_web_metrics(page_id: int, jwt_token: str) -> str:
-    import Domains.Results.LLMs.prompts as prompts
-
-    # Step 1: Fetch the metrics
-    url = f"http://127.0.0.1:8000/toolkit/web-metrics/business/?page_id={page_id}"
-    headers = {
-        "Authorization": f"Bearer {jwt_token}",
-        "Content-Type": "application/json"
+    # Cleaned numeric metrics
+    cleaned = { 
+        # normalize key names to match prompt expectations:
+        # e.g. "First Contentful Paint" -> "FCP"
+        # feel free to adjust mapping if you renamed metrics
+        {"First Contentful Paint": "FCP",
+         "Speed Index":             "SI",
+         "Largest Contentful Paint (LCP)": "LCP",
+         "Time to Interactive":     "TTI",
+         "Total Blocking Time (TBT)":  "TBT",
+         "Cumulative Layout Shift (CLS)": "CLS"
+        }[k]: _parse(v)
+        for k, v in raw_metrics.items()
+        if k in {
+            "First Contentful Paint",
+            "Speed Index",
+            "Largest Contentful Paint (LCP)",
+            "Time to Interactive",
+            "Total Blocking Time (TBT)",
+            "Cumulative Layout Shift (CLS)"
+        }
     }
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
 
-    metrics = response.json()["fs metrics"]
-
-    # Step 2: Clean and convert values
-    def parse_value(val: str) -> float:
-        val = val.replace(",", "").strip()
-        if val.endswith("ms"):
-            return float(val.replace("ms", "")) / 1000
-        if val.endswith("s"):
-            return float(val.replace("s", ""))
-        return float(val)
-
-    cleaned_metrics = {
-        "FCP": parse_value(metrics.get("First Contentful Paint", "0 s")),
-        "SI": parse_value(metrics.get("Speed Index", "0 s")),
-        "LCP": parse_value(metrics.get("Largest Contentful Paint (LCP)", "0 s")),
-        "TTI": parse_value(metrics.get("Time to Interactive", "0 s")),
-        "TBT": parse_value(metrics.get("Total Blocking Time (TBT)", "0 ms")),
-        "CLS": parse_value(metrics.get("Cumulative Layout Shift (CLS)", "0")),
-    }
-
-    # Step 3: Send to OpenAI
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    content = [
-        {"type": "text", "text": prompts.web_metrics_evaluator_prompt},
-        {"type": "text", "text": json.dumps({
-            "page_id": str(page_id),
-            "web_metrics": cleaned_metrics
-        })}
-    ]
     messages = [
         {"role": "system", "content": prompts.web_metrics_evaluator_system_message},
-        {"role": "user", "content": content}
+        {"role": "user",   "content": [
+            {"type": "text", "text": prompts.web_metrics_evaluator_prompt},
+            {"type": "text", "text": json.dumps({"web_metrics": cleaned})}
+        ]}
     ]
-    response = client.chat.completions.create(
+    resp = client.chat.completions.create(
         model="gpt-4.1-mini",
         messages=messages,
         temperature=0.2,
         max_tokens=700
     )
-    return response.choices[0].message.content
+    return resp.choices[0].message.content

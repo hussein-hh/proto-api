@@ -329,7 +329,6 @@ Rules:
 - Do not include any extra text outside the JSON format.
 """
 )
-
 web_metrics_evaluator_prompt = (
 """
 You will receive:
