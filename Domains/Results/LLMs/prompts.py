@@ -273,18 +273,33 @@ Tone:
 
 STRICT FORMAT:
 {
-  "overall_summary": "<2-sentence summary of the current performance>",
+  "overall_summary": "<3-5 sentences summary of the current performance>",
   "recommendations": [
-    "<concrete tip 1>",
-    "<concrete tip 2>",
+    "<FCP:..>",
+    "<LCP:..>",
     ...
+  ]
+}
+Example Output:
+{
+  "overall_summary": "The page’s paint and interaction metrics are lagging, causing delays before users see or can interact with content. Additionally, cumulative layout shifts remain noticeable, impacting stability during load.",
+  "recommendations": [
+    "FCP: Improve by inlining critical CSS and deferring non-critical styles to render meaningful content faster.",
+    "Speed Index: Lower by prioritizing above-the-fold assets and lazy-loading images below the fold.",
+    "LCP: Enhance by compressing and resizing the hero image, serving it in a next-gen format like WebP, and specifying width/height attributes.",
+    "TTI: Reduce by deferring or asynchronously loading non-essential third-party scripts to free up the main thread sooner.",
+    "TBT: Decrease by breaking up long JavaScript tasks into smaller chunks and using requestIdleCallback for heavy work.",
+    "CLS: You have a good CLS, to keep it this way going forward follow the best (...) practice."
   ]
 }
 
 Rules:
+- For any metric that’s already in a “good” range (e.g. LCP < 2.5 s, CLS < 0.1, TBT < 150 ms), include a positive note and one best-practice example for keeping it that way (e.g. “Great CLS at 0.05—continue reserving image space with CSS aspect-ratio boxes.”).
+- For metrics outside the good range, give concrete, actionable recommendations based on their actual values.
 - All suggestions must be based on actual metric values (e.g., LCP, CLS, TBT).
 - Be specific: mention things like image size, render-blocking JS, layout shifts, etc.
-- Never recommend something if the related metric is already very good.
+- Never recommend improvements for metrics that are already very good; instead, comment on their status and how to sustain them with best practices.
+- Give actionable recommendations that the user can implement immediately.
 - Do not include any extra text outside the JSON format.
 """
 )

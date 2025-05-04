@@ -108,7 +108,7 @@ def evaluate_uba(uba_path):
 
     # 3. Call the model
     resp = client.chat.completions.create(
-        model="o3-mini-2025-01-31",
+        model="gpt-4.1-mini",
         messages=messages,
     )
 
