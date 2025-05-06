@@ -290,3 +290,34 @@ class ScreenshotUploadAPIView(APIView):
         page.save()
 
         return Response({"message":"Screenshot uploaded","screenshot_path":page.screenshot}, status=status.HTTP_200_OK)
+   
+class PageDeleteAPIView(APIView):
+    def delete(self, request, page_id, page_type):
+        # 1) Require token
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return Response({"error": "Authorization header required."}, status=401)
+        token = auth.split(" ", 1)[1]        
+        if not token:
+            return Response(
+                {"error": "Token is required."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # 2) Authenticate
+        user, error = get_user_from_token(token)
+        if error:
+            return Response({"error": error}, status=status.HTTP_401_UNAUTHORIZED)
+
+        # 3) Ensure page belongs to this user and type matches
+        try:
+            page = Page.objects.get(id=page_id, page_type=page_type, user=user)
+        except Page.DoesNotExist:
+            return Response(
+                {"error": "Page not found, type mismatch, or not yours."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 4) Delete
+        page.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
