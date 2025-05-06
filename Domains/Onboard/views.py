@@ -29,35 +29,37 @@ def get_user_from_token(token):
         return None, f"Invalid or expired token: {str(e)}"
 
 class UserOnboardingAPIView(APIView):
-    """
-    Endpoint for onboarding/updating a user.
-    Expects:
-      - token: JWT token.
-      - first_name
-      - last_name
-      - username
-    """
     def post(self, request):
         token = request.data.get("token")
         if not token:
-            return Response({"error": "Token is required"}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({"error": "Missing token"}, status=status.HTTP_400_BAD_REQUEST)
+
         user, error = get_user_from_token(token)
         if error:
             return Response({"error": error}, status=status.HTTP_401_UNAUTHORIZED)
 
         first_name = request.data.get("first_name")
         last_name = request.data.get("last_name")
-        if not first_name or not last_name:
-            return Response(
-                {"error": "first_name, last_name, and username are required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        user.first_name = first_name
-        user.last_name = last_name
-        user.save()
-        return Response({"message": "User onboarded successfully."}, status=status.HTTP_200_OK)
+        user_role = request.data.get("user_role")
 
+        if user_role:
+            valid_roles = [choice.value for choice in User.UserRole]
+            if user_role not in valid_roles:
+                return Response(
+                    {"error": f"Invalid user_role. Must be one of {valid_roles}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            user.user_role = user_role
+
+        if first_name:
+            user.first_name = first_name
+        if last_name:
+            user.last_name = last_name
+
+        user.save()
+
+        return Response({"message": "User onboarded successfully"}, status=status.HTTP_200_OK)
+    
 
 class BusinessOnboardingAPIView(APIView):
     """
