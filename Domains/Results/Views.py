@@ -11,7 +11,7 @@ from django.utils.text import slugify
 from pathlib import Path
 from django.http import HttpResponse
 from rest_framework.response import Response
-from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui, evaluate_uba, formulate_ui, evaluate_web_metrics, web_search_agent
+from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui, evaluate_uba, formulate_ui, evaluate_web_metrics, web_search_agent, uba_formulator
 
 
 executor = ThreadPoolExecutor()
@@ -320,3 +320,42 @@ class EvaluateWebMetricsAPIView(APIView):
             )
 
         return Response({"web_metrics_report": result_json}, status=status.HTTP_200_OK)
+
+
+class FormulateUBAAPIView(APIView):
+    def get(self, request):
+        pid = request.query_params.get("page_id")
+        if not pid:
+            return Response({"error": "page_id missing"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            up = Upload.objects.get(references_page_id=pid)
+        except Upload.DoesNotExist:
+            return Response({"error": "Upload not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if not up.uba_report or not os.path.exists(up.uba_report):
+            return Response({"error": "UBA report not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        with open(up.uba_report, "r", encoding="utf-8") as f:
+            raw = json.load(f).get("report")
+
+        try:
+            formulation = uba_formulator(raw)   # now a dict
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # save JSON
+        folder = os.path.join("Records", "UBA-FORMULATIONS", pid)
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, "uba_formulation.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(formulation, f, ensure_ascii=False, indent=2)
+
+        # persist path (ensure your model has this field)
+        up.uba_formulation_report = path
+        up.save()
+
+        return Response(
+            {"uba_formulation": formulation, "saved_path": path},
+            status=status.HTTP_200_OK
+        )

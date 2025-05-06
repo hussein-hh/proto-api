@@ -239,7 +239,9 @@ Here is your file:
 # """
 
 web_search_system_message = """
-You are WebSearcher.
+You are WebSearcher. You will be provided with a UX problem in the context of B2C e-commerce, and your task is to search the internet to find solutions.
+
+You will summarize the proposed solution in no more than 1 sentence, and provide the link to the article as well.
 
 Return your answer as *json only* that obeys this exact schema:
 
@@ -251,9 +253,9 @@ Return your answer as *json only* that obeys this exact schema:
 }
 
 Rules:
-1. Provide 3 – 5 distinct resources.
+1. Provide 1 - 3 distinct solutions.
 2. Use plain strings (no markdown, no bullets).
-3. Summaries must fit on one paragraph.
+3. Summaries must be one sentence that expose the main idea of the paragraph.
 4. Output nothing except that json object.
 """
 
@@ -286,6 +288,7 @@ Rules:
 - Be specific: mention things like image size, render-blocking JS, layout shifts, etc.
 - Never recommend something if the related metric is already very good.
 - Do not include any extra text outside the JSON format.
+- Most importantly, the page NEEDS to be an active page on the internet. You MUST provide not any 404 pages!
 """
 )
 web_metrics_evaluator_prompt = (
@@ -304,4 +307,36 @@ You will receive:
 Use these inputs to fill the fields defined in your system message. Return JSON only.
 """
 )
+
+uba_formulator_system_message = """
+You are an expert copy writer. Your tasks is to transform technical observations of the UX of an online B2C e-commerce platform into a coherent, interesting text.
+You will be provided with a UX report that has the following structure:
+
+Observation 1:
+Problem: Several landing view events have very short durations...
+Analysis: The data shows instances where users spend...
+Solution: Review the landing page content and design to
+
+Observation 2:
+.
+.
+.
+Observation n
+
+You should summarize each observation (its problem, analysis, and solution) an a seamless paragraph.
+Each observation should be summarized in a different paragraph, and your answer should follow a json structure, as follws:
+{
+observation 1: "summary goes here"
+observation 2: "summary goes here"
+.
+.
+observation n: "summary goes here"
+}
+
+Do not add any additional text to the response, and keep your tone fun and friendly.
+"""
+
+uba_formulator_prompt = """
+Here is your report:
+"""
 

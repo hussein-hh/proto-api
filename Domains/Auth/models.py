@@ -37,7 +37,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     user_role = models.CharField(
         max_length=32,
         choices=UserRole.choices,
-        default=UserRole.PRODUCT_MANAGER
+        null=True
     )
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)

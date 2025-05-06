@@ -1,6 +1,6 @@
 from django.urls import path
 
-from Domains.Results.Views import PageStructureAPIView, PageStylingAPIView, PageUIReportAPIView, EvaluateUIAPIView, EvaluateUBAAPIView, FormulateUIAPIView, EvaluateWebMetricsAPIView, UBAProblemSolutionsAPIView
+from Domains.Results.Views import PageStructureAPIView, PageStylingAPIView, PageUIReportAPIView, EvaluateUIAPIView, EvaluateUBAAPIView, FormulateUIAPIView, EvaluateWebMetricsAPIView, UBAProblemSolutionsAPIView, FormulateUBAAPIView
 
 
 urlpatterns = [
@@ -12,4 +12,5 @@ urlpatterns = [
     path('formulate-ui/',      FormulateUIAPIView.as_view(),  name='formulate-ui'),
     path('evaluate-web-metrics/', EvaluateWebMetricsAPIView.as_view(), name='evaluate-web-metrics'),
     path('web-search/', UBAProblemSolutionsAPIView.as_view(), name='web-search'),
+    path('formulate-uba-answer/', FormulateUBAAPIView.as_view(), name='formulate-uba'),
 ]

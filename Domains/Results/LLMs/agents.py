@@ -123,34 +123,25 @@ def evaluate_uba(uba_path):
 
     return report
 
-def generate_chart_configs(observations: str, uba_json: str) -> str:
-    user_prompt = prompts.uba_plotter_prompt \
-        .replace("{OBS}", observations) \
-        .replace("{UBA}", uba_json)
-
-    msgs = [
-        {"role": "system", "content": prompts.uba_plotter_system_message},
-        {"role": "user",   "content": user_prompt},
-    ]
-
 
 def web_search_agent(problem: str) -> list[dict]:
     """
-    Takes a single UBA 'problem' string.
-    Returns a list of {source, summary} dicts.
+    Takes a single UBA 'problem' string and returns
+    a list of {source, summary} dicts using OpenAI’s
+    search-preview model for live web results.
     """
     resp = client.chat.completions.create(
-        model="o3-mini-2025-01-31",          # browsing-enabled o-series model
+        model="gpt-4o-mini-search-preview",   # built-in web-search model
         messages=[
-            {"role": "system", "content": prompts.web_search_system_message},
-            {"role": "user",   "content": problem}
-        ],
-        response_format={"type": "json_object"}   # ← forces pure JSON
+            {"role": "system",  "content": prompts.web_search_system_message},
+            {"role": "user",    "content": problem}
+        ]
+        # Note: no response_format parameter here
     )
-    # The model must reply with a JSON string; parse it.
+
+    # The assistant content is already JSON matching your schema
     payload = json.loads(resp.choices[0].message.content)
     return payload.get("resources", [])
-
 
 def evaluate_web_metrics(raw_metrics: dict) -> str:
     """
@@ -210,3 +201,24 @@ def evaluate_web_metrics(raw_metrics: dict) -> str:
     
     return output_text
 
+import json
+
+def uba_formulator(raw_report):
+    """
+    Transform a UBA report into plain‐language summaries as JSON.
+    """
+    report_str = raw_report if isinstance(raw_report, str) else json.dumps(raw_report)
+    messages = [
+        {"role": "system",  "content": prompts.uba_formulator_system_message},
+        {"role": "user",    "content": prompts.uba_formulator_prompt + report_str},
+    ]
+
+    resp = client.chat.completions.create(
+        model="o3-mini-2025-01-31",
+        messages=messages,
+    )
+    content = resp.choices[0].message.content.strip()
+    try:
+        return json.loads(content)   # <-- parse JSON here
+    except json.JSONDecodeError:
+        raise ValueError(f"LLM didn’t return valid JSON:\n{content}")

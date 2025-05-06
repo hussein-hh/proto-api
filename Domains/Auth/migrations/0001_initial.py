@@ -22,7 +22,7 @@ class Migration(migrations.Migration):
                 ('is_superuser', models.BooleanField(default=False, help_text='Designates that this user has all permissions without explicitly assigning them.', verbose_name='superuser status')),
                 ('email', models.EmailField(max_length=254, unique=True)),
                 ('full_name', models.CharField(blank=True, max_length=255)),
-                ('user_role', models.CharField(choices=[('UX Designer', 'Ux Designer'), ('Product Manager', 'Product Manager'), ('Frontend Developer', 'Frontend Developer'), ('Product Analyst', 'Product Analyst'), ('Product Owner', 'Product Owner')], default='Product Manager', max_length=32)),
+                ('user_role', models.CharField(choices=[('UX Designer', 'Ux Designer'), ('Product Manager', 'Product Manager'), ('Frontend Developer', 'Frontend Developer'), ('Product Analyst', 'Product Analyst'), ('Product Owner', 'Product Owner')], max_length=32)),
                 ('is_active', models.BooleanField(default=True)),
                 ('is_staff', models.BooleanField(default=False)),
                 ('date_joined', models.DateTimeField(default=django.utils.timezone.now)),
