@@ -8,7 +8,9 @@ from rest_framework import status
 from django.contrib.auth import get_user_model
 from .models import Business, Page, RoleModel
 import requests
-
+from rest_framework.parsers import MultiPartParser
+from django.core.validators import URLValidator
+from django.core.exceptions import ValidationError
 
 User = get_user_model()
 
@@ -45,8 +47,7 @@ class UserOnboardingAPIView(APIView):
 
         first_name = request.data.get("first_name")
         last_name = request.data.get("last_name")
-        username = request.data.get("username")
-        if not first_name or not last_name or not username:
+        if not first_name or not last_name:
             return Response(
                 {"error": "first_name, last_name, and username are required."},
                 status=status.HTTP_400_BAD_REQUEST
@@ -54,7 +55,6 @@ class UserOnboardingAPIView(APIView):
         
         user.first_name = first_name
         user.last_name = last_name
-        user.username = username
         user.save()
         return Response({"message": "User onboarded successfully."}, status=status.HTTP_200_OK)
 
@@ -110,42 +110,81 @@ class BusinessOnboardingAPIView(APIView):
 class PageOnboardingAPIView(APIView):
     """
     Endpoint for page onboarding.
-    Expects:
-      - token: JWT token.
-      - page_type: one of the allowed page types.
-      - url: page URL.
-    It will associate the page with the Business linked to the user,
-    then fetch HTML metadata, CSS metadata, and a screenshot, saving each.
+    Validates URL before creating the Page record.
+    If validation fails, returns 200 with null payload.
     """
     def post(self, request):
         token = request.data.get("token")
-        if not token:
-            return Response({"error": "Token is required"}, status=status.HTTP_401_UNAUTHORIZED)
+        page_type = request.data.get("page_type")
+        url = request.data.get("url")
 
+        if not token or not page_type or not url:
+            return Response({"error": "token, page_type and url required."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Authenticate user
         user, error = get_user_from_token(token)
         if error:
             return Response({"error": error}, status=status.HTTP_401_UNAUTHORIZED)
 
-        page_type = request.data.get("page_type")
-        url = request.data.get("url")
-        if not page_type or not url:
-            return Response(
-                {"error": "Both page_type and url are required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+        # Validate page_type
         valid_page_types = [choice[0] for choice in Page.PAGE_TYPE_CHOICES]
         if page_type not in valid_page_types:
             return Response({"error": "Invalid page type."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Check business exists
         try:
             business = Business.objects.get(user=user)
         except Business.DoesNotExist:
             return Response(
-                {"error": "User does not have an associated Business. Please onboard your business first."},
+                {"error": "User has no business. Please onboard business first."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # 1) Format validation
+        validator = URLValidator()
+        try:
+            validator(url)
+        except ValidationError:
+            # Return null payload on invalid URL
+            return Response({
+                "id": None,
+                "page_type": page_type,
+                "url": None,
+                "business": business.id,
+                "user_id": user.id,
+                "html_path": None,
+                "css_path": None,
+                "screenshot_path": None
+            }, status=status.HTTP_200_OK)
+
+        # 2) Reachability check
+        try:
+            resp = requests.head(url, timeout=5, allow_redirects=True)
+            if resp.status_code >= 400:
+                return Response({
+                    "id": None,
+                    "page_type": page_type,
+                    "url": None,
+                    "business": business.id,
+                    "user_id": user.id,
+                    "html_path": None,
+                    "css_path": None,
+                    "screenshot_path": None
+                }, status=status.HTTP_200_OK)
+        except requests.RequestException:
+            return Response({
+                "id": None,
+                "page_type": page_type,
+                "url": None,
+                "business": business.id,
+                "user_id": user.id,
+                "html_path": None,
+                "css_path": None,
+                "screenshot_path": None
+            }, status=status.HTTP_200_OK)
+
+        # Create Page
         page = Page.objects.create(
             page_type=page_type,
             url=url,
@@ -158,6 +197,7 @@ class PageOnboardingAPIView(APIView):
             os.makedirs(path, exist_ok=True)
             return path
 
+        # Fetch HTML
         html_resp = requests.get(f"http://127.0.0.1:8000/toolkit/business-html/?page_id={page.id}")
         if html_resp.ok:
             html_data = html_resp.json()
@@ -167,6 +207,7 @@ class PageOnboardingAPIView(APIView):
                 json.dump(html_data, f, ensure_ascii=False, indent=2)
             page.html = os.path.relpath(html_path, settings.BASE_DIR)
 
+        # Fetch CSS
         css_resp = requests.get(f"http://127.0.0.1:8000/toolkit/business-css/?page_id={page.id}")
         if css_resp.ok:
             css_data = css_resp.json()
@@ -176,6 +217,7 @@ class PageOnboardingAPIView(APIView):
                 json.dump(css_data, f, ensure_ascii=False, indent=2)
             page.css = os.path.relpath(css_path, settings.BASE_DIR)
 
+        # Fetch Screenshot
         try:
             ss_api_resp = requests.get(
                 f"http://127.0.0.1:8000/toolkit/take-screenshot/?page_id={page.id}",
@@ -183,14 +225,14 @@ class PageOnboardingAPIView(APIView):
             )
             if ss_api_resp.ok:
                 data = ss_api_resp.json()
-                screenshot_url = data.get("screenshot_url")
-                if screenshot_url:
-                    download_resp = requests.get(screenshot_url, timeout=120)
-                    if download_resp.ok:
+                shot_url = data.get("screenshot_url")
+                if shot_url:
+                    down = requests.get(shot_url, timeout=120)
+                    if down.ok:
                         ss_dir = make_dir('Records', 'SS', str(business.id), str(page.id))
                         ss_path = os.path.join(ss_dir, 'screenshot.png')
                         with open(ss_path, 'wb') as f:
-                            f.write(download_resp.content)
+                            f.write(down.content)
                         page.screenshot = os.path.relpath(ss_path, settings.BASE_DIR)
         except (requests.RequestException, ValueError):
             pass
@@ -208,30 +250,41 @@ class PageOnboardingAPIView(APIView):
             "screenshot_path": page.screenshot
         }, status=status.HTTP_201_CREATED)
 
-class EvaluateUIAPIView(APIView):
-    """
-    GET /ask-ai/evaluate-ui/?page_id=<id>
-    Loads the stored UI report JSON for the given page and returns it as 'evaluation'.
-    """
-    def get(self, request):
-        pid = request.query_params.get("page_id")
-        if not pid:
-            return Response({"error": "page_id missing"}, status=status.HTTP_400_BAD_REQUEST)
 
+class ScreenshotUploadAPIView(APIView):
+    parser_classes = [MultiPartParser]
+
+    def post(self, request):
+        token = request.data.get("token")
+        page_id = request.data.get("page_id")
+        screenshot = request.FILES.get("screenshot")
+
+        if not token or not page_id or not screenshot:
+            return Response({"error":"token, page_id & screenshot required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # verify user
         try:
-            page = Page.objects.get(id=pid)
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+            user = User.objects.get(id=payload["user_id"])
+        except Exception:
+            return Response({"error":"Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        # fetch & authorize page
+        try:
+            page = Page.objects.get(id=page_id, user=user)
         except Page.DoesNotExist:
-            return Response({"error": "Page not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error":"Page not found or not yours"}, status=status.HTTP_404_NOT_FOUND)
 
-        ui_report_path = page.ui_report
-        if not ui_report_path:
-            return Response({"error": "ui_report not available for this page"},
-                             status=status.HTTP_404_NOT_FOUND)
+        # save file
+        save_dir = os.path.join(settings.MEDIA_ROOT, "screenshots", str(user.id), str(page.id))
+        os.makedirs(save_dir, exist_ok=True)
+        save_path = os.path.join(save_dir, screenshot.name)
+        with open(save_path, "wb+") as dest:
+            for chunk in screenshot.chunks():
+                dest.write(chunk)
 
-        try:
-            with open(ui_report_path, "r", encoding="utf-8") as f:
-                report_data = json.load(f)
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # update model (adjust to your field type)
+        page.screenshot = os.path.relpath(save_path, settings.BASE_DIR)
+        page.save()
 
-        return Response({"evaluation": report_data}, status=status.HTTP_200_OK)
+        return Response({"message":"Screenshot uploaded","screenshot_path":page.screenshot}, status=status.HTTP_200_OK)

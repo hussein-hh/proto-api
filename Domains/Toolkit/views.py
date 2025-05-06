@@ -394,11 +394,10 @@ class TakeScreenshotAPIView(APIView):
             "url": page.url,
             "file_type": "png",
             "full_page": "true",
-            # --- fixes ---
-            "lazy_load": "true",          # scroll slowly, load everything
+            "lazy_load": "true",   
             "wait_for_event": "networkidle",
-            "delay": "2000",              # 2-second buffer (optional)
-            "no_cookie_banners": "true",  # hide GDPR overlay (optional)
+            "delay": "2000",          
+            "no_cookie_banners": "true", 
             "output": "json",
         }
 
@@ -409,6 +408,24 @@ class TakeScreenshotAPIView(APIView):
             if not shot_url:
                 return Response({"error": "Screenshot URL not returned."},
                                 status=status.HTTP_502_BAD_GATEWAY)
+
+            head = requests.head(shot_url, timeout=10)
+            content_type = head.headers.get("Content-Type", "")
+            content_length = int(head.headers.get("Content-Length", 0))
+
+            if head.status_code != 200 or not content_type.startswith("image/"):
+                return Response(
+                    {"error": "Screenshot failed—got non-image response."},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+
+            if content_length < 100_000:   
+                return Response(
+                    {"error": "Screenshot empty or placeholder image (too small)."},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+            # -------------------------
+
             return Response(
                 {"success": "Screenshot captured successfully.", "screenshot_url": shot_url}
             )
@@ -422,6 +439,7 @@ class TakeScreenshotAPIView(APIView):
             return Response(
                 {"error": f"Failed to take screenshot: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class QuickChartAPIView(APIView):
     def get(self, request):
