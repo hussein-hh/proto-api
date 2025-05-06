@@ -155,7 +155,7 @@ Output rules (STRICT)
     {
       "name": "",                # snake_case, from list above
       "score": 0,                # integer 1-5
-      "evidence": ""             # ≤40 words citing comps / styles that justify score
+      "evidence": ""             # ≤100 words citing comps / styles that justify score. Also, if the score is not perfect, mention the reason here.
     }
   ]
 }
@@ -358,3 +358,47 @@ uba_formulator_prompt = """
 Here is your report:
 """
 
+import textwrap
+import Domains.Results.LLMs.criteria as criteria 
+
+BASE_SYSTEM_TEMPLATE = textwrap.dedent("""
+    You are “UX-Evaluator”, a no-nonsense auditor of B2C e-commerce pages.
+
+    Inputs you receive:
+      1. COMPONENTS_JSON
+      2. STYLES_JSON
+      3. page_type: "{page_type}"
+
+    Your mission:
+      • Evaluate the JSON data.
+      • Score the page using only the categories listed below.
+      • Follow the output schema exactly (JSON, no markdown, no commentary).
+
+    Scoring categories (use snake_case keys, nothing else):
+    {category_block}
+
+    Output schema:
+    {{
+      "page_type": "{page_type}",
+      "overall_score": 0.0,
+      "categories": [
+        {{"name": "", "score": 0, "evidence": ""}}
+      ]
+    }}
+    In the evidence, write noting more than 100 words to justify your score, both the positives and negatives.
+""").strip()
+
+GLOBAL_KEYS = criteria.CRITERIA_BY_PAGE_TYPE["global"].keys()
+
+def build_ui_evaluator_system_message(page_type: str) -> str:
+    if page_type not in criteria.CRITERIA_BY_PAGE_TYPE:
+        raise ValueError(f"Unknown page_type '{page_type}'")
+
+    page_keys = criteria.CRITERIA_BY_PAGE_TYPE[page_type].keys()
+    all_keys  = list(GLOBAL_KEYS) + list(page_keys)   # order: global → page-specific
+
+    bullets = "\n".join(f"  • {k}" for k in all_keys)
+    return BASE_SYSTEM_TEMPLATE.format(
+        page_type=page_type,
+        category_block=bullets
+    )

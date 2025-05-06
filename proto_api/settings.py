@@ -165,3 +165,26 @@ CACHES = {
         "LOCATION": "unique-snowflake",
     }
 }
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "brief": {
+            "format": "%(levelname)s %(name)s | %(message)s"
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "brief",
+        },
+    },
+    "loggers": {
+        "ux_eval": {           # our dedicated channel
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}

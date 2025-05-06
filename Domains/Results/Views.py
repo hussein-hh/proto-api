@@ -114,53 +114,104 @@ class PageUIReportAPIView(APIView):
             "saved_path": file_path
         }, status=status.HTTP_200_OK)
 
+# views.py  ─────────────────────────────────────────────────────────
+import os, json, base64, logging, requests
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
+
+log = logging.getLogger("ux_eval")    
+
+PAGE_TYPE_SLUG = {
+    "landing page":         "landing",
+    "landing":              "landing",
+    "search results page":  "search",
+    "search results":       "search",
+    "search":               "search",
+    "product page":         "product",
+    "product":              "product",
+}
+
+def page_type_slug(raw: str | None) -> str | None:
+    """Normalise DB value to slug key used in criteria.py."""
+    if not raw:
+        return None
+    return PAGE_TYPE_SLUG.get(raw.strip().lower())
+
+
 class EvaluateUIAPIView(APIView):
+    """GET /ask-ai/evaluate-ui/?page_id=<id>"""
+
     def get(self, request):
         pid = request.query_params.get("page_id")
         if not pid:
-            return Response({"error": "page_id missing"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "page_id missing"},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-        # fetch page record
         try:
             page = Page.objects.get(id=pid)
         except Page.DoesNotExist:
-            return Response({"error": "Page not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "Page not found"},
+                            status=status.HTTP_404_NOT_FOUND)
 
-        # check if report exists; if not, trigger generation
         if not page.ui_report or not os.path.exists(page.ui_report):
             try:
-                gen_res = requests.get(f"http://127.0.0.1:8000/ask-ai/describe-page/?page_id={pid}")
-                if gen_res.status_code != 200:
-                    return Response({"error": "Failed to generate UI report"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                # refresh page object to get new ui_report path
+                r = requests.get(
+                    f"http://127.0.0.1:8000/ask-ai/describe-page/?page_id={pid}",
+                    timeout=(5, 180)          
+                )
+                if r.status_code != 200:
+                    log.error(f"page {pid} | report gen failed | {r.status_code}")
+                    return Response({"error": "Failed to generate UI report"},
+                                    status=status.HTTP_502_BAD_GATEWAY)
                 page.refresh_from_db()
             except Exception as e:
-                return Response({"error": f"Error during UI report generation: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                log.exception(f"page {pid} | describe-page error")
+                return Response({"error": f"Error generating UI report: {e}"},
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # load the report
         try:
-            with open(page.ui_report, "r", encoding="utf-8") as f:
-                report_data = json.load(f)
+            with open(page.ui_report, "r", encoding="utf-8") as fh:
+                report_data = json.load(fh)
+            with open(page.screenshot, "rb") as img_fh:
+                screenshot_b64 = base64.b64encode(img_fh.read()).decode()
         except Exception as e:
-            return Response({"error": f"Could not read UI report: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # load screenshot
-        try:
-            with open(page.screenshot, "rb") as img_f:
-                screenshot_b64 = base64.b64encode(img_f.read()).decode()
-        except Exception as e:
-            return Response({"error": f"Failed to load screenshot: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            log.exception(f"page {pid} | file load error")
+            return Response({"error": f"File load failed: {e}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         business_type = getattr(page.business, "category", "unknown")
-        page_type     = getattr(page,        "page_type", "unknown")
+        raw_type      = getattr(page,        "page_type",  "")
+        page_type     = page_type_slug(raw_type)
+
+        if not page_type:
+            log.error(f"page {pid} | unknown page_type='{raw_type}'")
+            return Response({"error": f"Unrecognised page_type '{raw_type}'"},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            evaluation = evaluate_ui(report_data, screenshot_b64, business_type, page_type)
+            evaluation = evaluate_ui(
+                report_data,
+                screenshot_b64,
+                business_type,
+                page_type,
+            )
+        except ValueError as ve:
+            log.warning(f"page {pid} | validation error | {ve}")
+            return Response({"error": "Evaluation category mismatch",
+                             "detail": str(ve)},
+                            status=status.HTTP_502_BAD_GATEWAY)
         except Exception as e:
-            return Response({"error": f"Evaluation failed: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            log.exception(f"page {pid} | evaluation crash")
+            return Response({"error": "Evaluation failed",
+                             "detail": str(e)},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        return Response({"evaluation": evaluation}, status=status.HTTP_200_OK)
-    
+        log.info(f"page {pid} | evaluation OK")
+        return Response({"evaluation": evaluation},
+                        status=status.HTTP_200_OK)
+
 
 class FormulateUIAPIView(APIView):
     def get(self, request):

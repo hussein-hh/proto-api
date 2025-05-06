@@ -3,7 +3,12 @@ import os, json, csv
 from dotenv import load_dotenv
 from openai import OpenAI
 import Domains.Results.LLMs.prompts as prompts 
-import re  # Add import for regex
+import re 
+import Domains.Results.LLMs.criteria as criteria
+import logging, time, json
+from openai import RateLimitError
+
+log = logging.getLogger("ux_eval")
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -41,36 +46,33 @@ def describe_styling(image_b64, html_json, css_json):
     )
     return resp.choices[0].message.content
 
-import json
-from openai import OpenAI
-import Domains.Results.LLMs.prompts as prompts
 
-def evaluate_ui(
-    ui_report: dict,
-    screenshot_b64: str,
-    business_type: str,
-    page_type: str
-) -> str:
+# def evaluate_ui(
+#     ui_report: dict,
+#     screenshot_b64: str,
+#     business_type: str,
+#     page_type: str
+# ) -> str:
 
-    content = [
-        {"type": "text", "text": prompts.ui_evaluator_prompt},
-        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{screenshot_b64}"}},
-        {"type": "text", "text": json.dumps(ui_report)},
-        {"type": "text", "text": f"Business type: {business_type}"},
-        {"type": "text", "text": f"Page type: {page_type}"},
-    ]
-    msgs = [
-        {"role": "system", "content": prompts.ui_evaluator_system_message},
-        {"role": "user",   "content": content},
-    ]
+#     content = [
+#         {"type": "text", "text": prompts.ui_evaluator_prompt},
+#         {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{screenshot_b64}"}},
+#         {"type": "text", "text": json.dumps(ui_report)},
+#         {"type": "text", "text": f"Business type: {business_type}"},
+#         {"type": "text", "text": f"Page type: {page_type}"},
+#     ]
+#     msgs = [
+#         {"role": "system", "content": prompts.ui_evaluator_system_message},
+#         {"role": "user",   "content": content},
+#     ]
 
-    resp = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=msgs,
-        temperature=temp,
-        max_tokens=max_tok,
-    )
-    return resp.choices[0].message.content
+#     resp = client.chat.completions.create(
+#         model="gpt-4.1-mini",
+#         messages=msgs,
+#         temperature=temp,
+#         max_tokens=max_tok,
+#     )
+#     return resp.choices[0].message.content
 
 def formulate_ui(evaluation_json: dict) -> str:
     content = [
@@ -201,7 +203,6 @@ def evaluate_web_metrics(raw_metrics: dict) -> str:
     
     return output_text
 
-import json
 
 def uba_formulator(raw_report):
     """
@@ -222,3 +223,52 @@ def uba_formulator(raw_report):
         return json.loads(content)   # <-- parse JSON here
     except json.JSONDecodeError:
         raise ValueError(f"LLM didn’t return valid JSON:\n{content}")
+
+def evaluate_ui(ui_report, screenshot_b64, business_type, page_type):
+    system_msg = prompts.build_ui_evaluator_system_message(page_type)
+
+    content = [
+        {"type": "text", "text": prompts.ui_evaluator_prompt},
+        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{screenshot_b64}"}},
+        {"type": "text", "text": json.dumps(ui_report)},
+        {"type": "text", "text": f"Business type: {business_type}"},
+        {"type": "text", "text": f"Page type: {page_type}"},
+    ]
+
+    t0 = time.time()
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[{"role": "system", "content": system_msg},
+                      {"role": "assistant", "content": json.dumps({
+                          k: v["summary"]
+                          for k, v in criteria.CRITERIA_BY_PAGE_TYPE[page_type].items()
+                      })},
+                      {"role": "user", "content": content}],
+            temperature=temp,
+            max_tokens=max_tok,
+        )
+    except RateLimitError as e:
+        log.error(f"{page_type} | rate-limit: {e}")
+        raise
+
+    latency = time.time() - t0
+    usage   = resp.usage  # if the SDK exposes token counts
+    log.info(f"{page_type} | ok | {latency:.2f}s | prompt={usage.prompt_tokens} "
+             f"→ completion={usage.completion_tokens}")
+
+    raw = resp.choices[0].message.content
+    result = json.loads(raw)
+
+    GLOBAL_KEYS = criteria.CRITERIA_BY_PAGE_TYPE["global"].keys()
+    expected = set(GLOBAL_KEYS) | set(criteria.CRITERIA_BY_PAGE_TYPE[page_type].keys())
+    found    = {c["name"] for c in result.get("categories", [])}
+    if expected != found:
+        missing = expected - found
+        extra   = found - expected
+        log.warning(f"{page_type} | bad categories | missing={missing} extra={extra}")
+        raise ValueError(
+            f"Model returned wrong categories. missing={list(missing)}, extra={list(extra)}"
+        )
+
+    return result
