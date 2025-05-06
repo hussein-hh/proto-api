@@ -349,6 +349,9 @@ observation n: "summary goes here"
 }
 
 Do not add any additional text to the response, and keep your tone fun and friendly.
+
+The output must not be discretely divided into `problem` and `solution`.. rather, the text, when attached together, should form a coherent body of text.
+Include markdown in the text to make it more readable and easy for the eye
 """
 
 uba_formulator_prompt = """
