@@ -126,18 +126,25 @@ class EvaluateUIAPIView(APIView):
         except Page.DoesNotExist:
             return Response({"error": "Page not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # load previously saved UI report
-        ui_report_path = page.ui_report
-        if not ui_report_path:
-            return Response({"error": "UI report not generated"}, status=status.HTTP_400_BAD_REQUEST)
+        # check if report exists; if not, trigger generation
+        if not page.ui_report or not os.path.exists(page.ui_report):
+            try:
+                gen_res = requests.get(f"http://127.0.0.1:8000/ask-ai/describe-page/?page_id={pid}")
+                if gen_res.status_code != 200:
+                    return Response({"error": "Failed to generate UI report"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                # refresh page object to get new ui_report path
+                page.refresh_from_db()
+            except Exception as e:
+                return Response({"error": f"Error during UI report generation: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+        # load the report
         try:
-            with open(ui_report_path, "r", encoding="utf-8") as f:
+            with open(page.ui_report, "r", encoding="utf-8") as f:
                 report_data = json.load(f)
         except Exception as e:
             return Response({"error": f"Could not read UI report: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # --- new: load screenshot and fetch metadata ---
+        # load screenshot
         try:
             with open(page.screenshot, "rb") as img_f:
                 screenshot_b64 = base64.b64encode(img_f.read()).decode()
@@ -147,19 +154,14 @@ class EvaluateUIAPIView(APIView):
         business_type = getattr(page.business, "category", "unknown")
         page_type     = getattr(page,        "page_type", "unknown")
 
-        # call the pure-LLM agent
         try:
-            evaluation = evaluate_ui(
-                report_data,
-                screenshot_b64,
-                business_type,
-                page_type
-            )
+            evaluation = evaluate_ui(report_data, screenshot_b64, business_type, page_type)
         except Exception as e:
             return Response({"error": f"Evaluation failed: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({"evaluation": evaluation}, status=status.HTTP_200_OK)
     
+
 class FormulateUIAPIView(APIView):
     def get(self, request):
         pid = request.query_params.get("page_id")
