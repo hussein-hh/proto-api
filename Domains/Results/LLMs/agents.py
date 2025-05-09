@@ -272,3 +272,18 @@ def evaluate_ui(ui_report, screenshot_b64, business_type, page_type):
         )
 
     return result
+
+def chat_completion(messages: list[dict[str, str]]) -> str:
+    """
+    messages = [
+        {"role": "system"   , "content": prompts.chat_system_message},
+        *client_messages*   # user / assistant pairs forwarded from the UI
+    ]
+    """
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",          # fast + cheap; swap later if needed
+        messages=messages,
+        temperature=0.7,
+        max_tokens=500,
+    )
+    return resp.choices[0].message.content

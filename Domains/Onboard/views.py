@@ -15,9 +15,6 @@ from django.core.exceptions import ValidationError
 User = get_user_model()
 
 def get_user_from_token(token):
-    """
-    Helper function to decode JWT and retrieve the user.
-    """
     try:
         decoded = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         user_id = decoded.get('user_id')
@@ -27,6 +24,7 @@ def get_user_from_token(token):
         return user, None
     except Exception as e:
         return None, f"Invalid or expired token: {str(e)}"
+
 
 class UserOnboardingAPIView(APIView):
     def post(self, request):
@@ -62,14 +60,6 @@ class UserOnboardingAPIView(APIView):
     
 
 class BusinessOnboardingAPIView(APIView):
-    """
-    Endpoint for business onboarding.
-    Expects:
-      - token: JWT token.
-      - name: business name.
-      - category: business type (must be one of the defined choices).
-      - role_model: (optional) RoleModel id.
-    """
     def post(self, request):
         token = request.data.get("token")
         if not token:
@@ -109,12 +99,8 @@ class BusinessOnboardingAPIView(APIView):
             "role_model": business.role_model.id if business.role_model else None,
         }, status=status.HTTP_201_CREATED)
 
+
 class PageOnboardingAPIView(APIView):
-    """
-    Endpoint for page onboarding.
-    Validates URL before creating the Page record.
-    If validation fails, returns 200 with null payload.
-    """
     def post(self, request):
         token = request.data.get("token")
         page_type = request.data.get("page_type")
@@ -124,17 +110,14 @@ class PageOnboardingAPIView(APIView):
             return Response({"error": "token, page_type and url required."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # Authenticate user
         user, error = get_user_from_token(token)
         if error:
             return Response({"error": error}, status=status.HTTP_401_UNAUTHORIZED)
 
-        # Validate page_type
         valid_page_types = [choice[0] for choice in Page.PAGE_TYPE_CHOICES]
         if page_type not in valid_page_types:
             return Response({"error": "Invalid page type."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check business exists
         try:
             business = Business.objects.get(user=user)
         except Business.DoesNotExist:
@@ -143,12 +126,11 @@ class PageOnboardingAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # 1) Format validation
         validator = URLValidator()
         try:
             validator(url)
         except ValidationError:
-            # Return null payload on invalid URL
+
             return Response({
                 "id": None,
                 "page_type": page_type,
@@ -160,7 +142,6 @@ class PageOnboardingAPIView(APIView):
                 "screenshot_path": None
             }, status=status.HTTP_200_OK)
 
-        # 2) Reachability check
         try:
             resp = requests.head(url, timeout=5, allow_redirects=True)
             if resp.status_code >= 400:
@@ -186,7 +167,6 @@ class PageOnboardingAPIView(APIView):
                 "screenshot_path": None
             }, status=status.HTTP_200_OK)
 
-        # Create Page
         page = Page.objects.create(
             page_type=page_type,
             url=url,
@@ -199,7 +179,6 @@ class PageOnboardingAPIView(APIView):
             os.makedirs(path, exist_ok=True)
             return path
 
-        # Fetch HTML
         html_resp = requests.get(f"http://127.0.0.1:8000/toolkit/business-html/?page_id={page.id}")
         if html_resp.ok:
             html_data = html_resp.json()
@@ -209,7 +188,6 @@ class PageOnboardingAPIView(APIView):
                 json.dump(html_data, f, ensure_ascii=False, indent=2)
             page.html = os.path.relpath(html_path, settings.BASE_DIR)
 
-        # Fetch CSS
         css_resp = requests.get(f"http://127.0.0.1:8000/toolkit/business-css/?page_id={page.id}")
         if css_resp.ok:
             css_data = css_resp.json()
@@ -219,7 +197,6 @@ class PageOnboardingAPIView(APIView):
                 json.dump(css_data, f, ensure_ascii=False, indent=2)
             page.css = os.path.relpath(css_path, settings.BASE_DIR)
 
-        # Fetch Screenshot
         try:
             ss_api_resp = requests.get(
                 f"http://127.0.0.1:8000/toolkit/take-screenshot/?page_id={page.id}",
@@ -231,8 +208,8 @@ class PageOnboardingAPIView(APIView):
                 if shot_url:
                     down = requests.get(shot_url, timeout=120)
                     if down.ok:
-                        ss_dir = make_dir('Records', 'SS', str(business.id), str(page.id))
-                        ss_path = os.path.join(ss_dir, 'screenshot.png')
+                        ss_dir = make_dir('Records', 'SS', str(business.id))
+                        ss_path = os.path.join(ss_dir, f'screenshot_{page.id}.png')
                         with open(ss_path, 'wb') as f:
                             f.write(down.content)
                         page.screenshot = os.path.relpath(ss_path, settings.BASE_DIR)
@@ -264,28 +241,25 @@ class ScreenshotUploadAPIView(APIView):
         if not token or not page_id or not screenshot:
             return Response({"error":"token, page_id & screenshot required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # verify user
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
             user = User.objects.get(id=payload["user_id"])
         except Exception:
             return Response({"error":"Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
 
-        # fetch & authorize page
         try:
             page = Page.objects.get(id=page_id, user=user)
         except Page.DoesNotExist:
             return Response({"error":"Page not found or not yours"}, status=status.HTTP_404_NOT_FOUND)
 
-        # save file
-        save_dir = os.path.join(settings.MEDIA_ROOT, "screenshots", str(user.id), str(page.id))
+        save_dir = os.path.join("Records", "SS", str(page.business.id))
         os.makedirs(save_dir, exist_ok=True)
-        save_path = os.path.join(save_dir, screenshot.name)
+        filename = f'screenshot_{page.id}_{screenshot.name}'
+        save_path = os.path.join(save_dir, filename)
         with open(save_path, "wb+") as dest:
             for chunk in screenshot.chunks():
                 dest.write(chunk)
 
-        # update model (adjust to your field type)
         page.screenshot = os.path.relpath(save_path, settings.BASE_DIR)
         page.save()
 
@@ -293,7 +267,7 @@ class ScreenshotUploadAPIView(APIView):
    
 class PageDeleteAPIView(APIView):
     def delete(self, request, page_id, page_type):
-        # 1) Require token
+
         auth = request.headers.get("Authorization", "")
         if not auth.startswith("Bearer "):
             return Response({"error": "Authorization header required."}, status=401)
@@ -304,12 +278,10 @@ class PageDeleteAPIView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        # 2) Authenticate
         user, error = get_user_from_token(token)
         if error:
             return Response({"error": error}, status=status.HTTP_401_UNAUTHORIZED)
 
-        # 3) Ensure page belongs to this user and type matches
         try:
             page = Page.objects.get(id=page_id, page_type=page_type, user=user)
         except Page.DoesNotExist:
@@ -318,6 +290,5 @@ class PageDeleteAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # 4) Delete
         page.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

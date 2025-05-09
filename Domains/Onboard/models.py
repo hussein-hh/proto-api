@@ -29,8 +29,8 @@ class RoleModelPage(models.Model):
 
     role_model = models.ForeignKey(RoleModel, on_delete=models.CASCADE, related_name="pages")
     page_type = models.CharField(max_length=50, choices=PAGE_TYPE_CHOICES)
-    wpm = models.FilePathField(path="Records/WPM-REPORTS", allow_files=True, match=".*\.json$", recursive=True,null=True)
-    ui_report = models.FilePathField(path="Records/UI-REPORTS", allow_files=True, match=".*\.json$", recursive=True,null=True)
+    wpm = models.FilePathField(path="uploads", allow_files=True, match=".*\.json$", recursive=True, null=True)
+    ui_report = models.FilePathField(path="uploads", allow_files=True, match=".*\.json$", recursive=True, null=True)
     url = models.URLField(null=True, blank=True, max_length=1000)
 
     def __str__(self):
@@ -57,12 +57,6 @@ class Page(models.Model):
         ("Search Results Page", "Search Results Page"),
         ("Product Page", "Product Page"),
     ]
-    FILE_TYPES = (
-        ('txt', 'Text File'),
-        ('csv', 'CSV'),
-        ('pdf', 'PDF'),
-        ('jpg', 'JPG'),
-    )
 
     url = models.URLField(null=True, blank=True)
     page_type = models.CharField(max_length=20, choices=PAGE_TYPE_CHOICES, default="Landing Page")
@@ -72,7 +66,7 @@ class Page(models.Model):
     html = models.TextField(null=True, blank=True)
     css = models.TextField(null=True, blank=True)
     ui_report = models.TextField(null=True, blank=True)
-
+    wpm = models.TextField(null=True, blank=True)
 
 
     def __str__(self):

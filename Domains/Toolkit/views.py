@@ -102,11 +102,37 @@ class WebMetricsAPIView(APIView):
         if not target_url:
             return Response({"error": "Page URL is empty or missing."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Check if metrics already exist
+        metrics_dir = os.path.join('Records', 'web_metrics', 'business')
+        metrics_path = os.path.join(metrics_dir, f'{page_id}.json')
+        
+        if os.path.exists(metrics_path):
+            try:
+                with open(metrics_path, 'r', encoding='utf-8') as f:
+                    stored_metrics = json.load(f)
+                    # Store the relative path in the wpm field
+                    page.wpm = os.path.relpath(metrics_path)
+                    page.save()
+                return Response(stored_metrics, status=status.HTTP_200_OK)
+            except json.JSONDecodeError:
+                pass
+
+        # If no stored metrics or corrupted, fetch new ones
         with concurrent.futures.ThreadPoolExecutor() as executor:
             future_metrics = executor.submit(get_web_performance, target_url)
             metrics_result = future_metrics.result()
 
-        return Response({f"{business.name} metrics": metrics_result}, status=status.HTTP_200_OK)
+        # Save metrics to file
+        os.makedirs(metrics_dir, exist_ok=True)
+        metrics_data = {f"{business.name} metrics": metrics_result}
+        with open(metrics_path, 'w', encoding='utf-8') as f:
+            json.dump(metrics_data, f, ensure_ascii=False, indent=2)
+        
+        # Store the relative path in the wpm field
+        page.wpm = os.path.relpath(metrics_path)
+        page.save()
+
+        return Response(metrics_data, status=status.HTTP_200_OK)
 
 class RoleModelWebMetricsAPIView(APIView):
 
@@ -145,8 +171,33 @@ class RoleModelWebMetricsAPIView(APIView):
             return Response({"error": f"No URL set on RoleModelPage for '{page_type}'."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # direct call—no threading
+        # Check if metrics already exist
+        metrics_dir = os.path.join('Records', 'web_metrics', 'role_model')
+        metrics_path = os.path.join(metrics_dir, f'{role_model.id}.json')
+        
+        if os.path.exists(metrics_path):
+            try:
+                with open(metrics_path, 'r', encoding='utf-8') as f:
+                    stored_metrics = json.load(f)
+                    # Store the relative path in the wpm field
+                    rm_page.wpm = os.path.relpath(metrics_path)
+                    rm_page.save()
+                return Response(stored_metrics, status=status.HTTP_200_OK)
+            except json.JSONDecodeError:
+                pass
+
+        # If no stored metrics or corrupted, fetch new ones
         metrics_result = get_web_performance(role_model_url)
+
+        # Save metrics to file
+        os.makedirs(metrics_dir, exist_ok=True)
+        metrics_data = {f"{role_model.name} {page_type} metrics": metrics_result}
+        with open(metrics_path, 'w', encoding='utf-8') as f:
+            json.dump(metrics_data, f, ensure_ascii=False, indent=2)
+        
+        # Store the relative path in the wpm field
+        rm_page.wpm = os.path.relpath(metrics_path)
+        rm_page.save()
 
         response_key = f"{role_model.name} {page_type} metrics"
         return Response({response_key: metrics_result}, status=status.HTTP_200_OK)
@@ -483,7 +534,7 @@ class ListChartConfigsAPIView(APIView):
     GET /toolkit/list-chart-configs/?page_id=<page_id>
     """
     def get(self, request, page_id=None):
-        # if it wasn’t provided in the URL, grab from querystring
+        # if it wasn't provided in the URL, grab from querystring
         if page_id is None:
             page_id = request.query_params.get("page_id")
         if not page_id:
