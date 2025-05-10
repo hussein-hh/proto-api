@@ -48,7 +48,9 @@ INSTALLED_APPS = [
 ]
 
 AUTH_USER_MODEL = 'Auth.User'
-
+EXPLORER_CONNECTIONS = {
+    'default': 'default',   # Display name : Django DATABASES key
+}
 MIDDLEWARE = [
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.middleware.security.SecurityMiddleware',
