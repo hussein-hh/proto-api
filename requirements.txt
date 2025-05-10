@@ -16,3 +16,4 @@ psycopg2-binary>=2.9.0
 dj-database-url>=1.0.0
 whitenoise
 django-sql-explorer
+cloudinary
