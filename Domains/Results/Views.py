@@ -196,7 +196,7 @@ class EvaluateUIAPIView(APIView):
         if not page.ui_report or not os.path.exists(page.ui_report):
             try:
                 r = requests.get(
-                    f"http://127.0.0.1:8000/ask-ai/describe-page/?page_id={pid}",
+                    f"http://proto-api-kg9r.onrender.com/ask-ai/describe-page/?page_id={pid}",
                     timeout=(5, 180)          
                 )
                 if r.status_code != 200:

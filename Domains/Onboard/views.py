@@ -179,7 +179,7 @@ class PageOnboardingAPIView(APIView):
             os.makedirs(path, exist_ok=True)
             return path
 
-        html_resp = requests.get(f"http://127.0.0.1:8000/toolkit/business-html/?page_id={page.id}")
+        html_resp = requests.get(f"http://proto-api-kg9r.onrender.com/toolkit/business-html/?page_id={page.id}")
         if html_resp.ok:
             html_data = html_resp.json()
             html_dir = make_dir('Records', 'HTML', str(business.id), str(page.id))
@@ -188,7 +188,7 @@ class PageOnboardingAPIView(APIView):
                 json.dump(html_data, f, ensure_ascii=False, indent=2)
             page.html = os.path.relpath(html_path, settings.BASE_DIR)
 
-        css_resp = requests.get(f"http://127.0.0.1:8000/toolkit/business-css/?page_id={page.id}")
+        css_resp = requests.get(f"http://proto-api-kg9r.onrender.com/toolkit/business-css/?page_id={page.id}")
         if css_resp.ok:
             css_data = css_resp.json()
             css_dir = make_dir('Records', 'CSS', str(business.id), str(page.id))
@@ -199,7 +199,7 @@ class PageOnboardingAPIView(APIView):
 
         try:
             ss_api_resp = requests.get(
-                f"http://127.0.0.1:8000/toolkit/take-screenshot/?page_id={page.id}",
+                f"http://proto-api-kg9r.onrender.com/toolkit/take-screenshot/?page_id={page.id}",
                 timeout=60
             )
             if ss_api_resp.ok:
