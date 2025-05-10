@@ -52,6 +52,7 @@ EXPLORER_CONNECTIONS = {
     'default': 'default',   # Display name : Django DATABASES key
 }
 EXPLORER_ALLOW_MUTATIONS = True
+EXPLORER_SQL_BLACKLIST = []
 MIDDLEWARE = [
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.middleware.security.SecurityMiddleware',
