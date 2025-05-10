@@ -11,7 +11,6 @@ import requests
 from rest_framework.parsers import MultiPartParser
 from django.core.validators import URLValidator
 from django.core.exceptions import ValidationError
-from Domains.Toolkit.views import BusinessHTMLAPIView
 
 User = get_user_model()
 
@@ -175,61 +174,65 @@ class PageOnboardingAPIView(APIView):
             user=user
         )
 
-        def make_dir(*parts):
-            path = os.path.join(settings.BASE_DIR, *parts)
-            os.makedirs(path, exist_ok=True)
-            return path
-
-        # Fetch HTML content directly using the view
-        html_view = BusinessHTMLAPIView()
-        html_response = html_view.get(request._request, page_id=page.id)
-        if html_response.status_code != 200:
-            return Response({"error": "Failed to fetch HTML content"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-        html_content = html_response.data.get("html", "")
-        if not html_content:
-            return Response({"error": "No HTML content found"}, status=status.HTTP_404_NOT_FOUND)
-
-        css_resp = requests.get(f"http://proto-api-kg9r.onrender.com/toolkit/business-css/?page_id={page.id}")
-        if css_resp.ok:
-            css_data = css_resp.json()
-            css_dir = make_dir('Records', 'CSS', str(business.id), str(page.id))
-            css_path = os.path.join(css_dir, 'business_css.json')
-            with open(css_path, 'w', encoding='utf-8') as f:
-                json.dump(css_data, f, ensure_ascii=False, indent=2)
-            page.css = os.path.relpath(css_path, settings.BASE_DIR)
-
+        # Fetch HTML content directly
         try:
-            ss_api_resp = requests.get(
-                f"http://proto-api-kg9r.onrender.com/toolkit/take-screenshot/?page_id={page.id}",
-                timeout=60
-            )
-            if ss_api_resp.ok:
-                data = ss_api_resp.json()
-                shot_url = data.get("screenshot_url")
-                if shot_url:
-                    down = requests.get(shot_url, timeout=120)
-                    if down.ok:
-                        ss_dir = make_dir('Records', 'SS', str(business.id))
-                        ss_path = os.path.join(ss_dir, f'screenshot_{page.id}.png')
-                        with open(ss_path, 'wb') as f:
-                            f.write(down.content)
-                        page.screenshot = os.path.relpath(ss_path, settings.BASE_DIR)
-        except (requests.RequestException, ValueError):
-            pass
+            response = requests.get(page.url)
+            if response.status_code != 200:
+                return Response({"error": "Failed to fetch HTML content"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            html_content = response.text
+            if not html_content:
+                return Response({"error": "No HTML content found"}, status=status.HTTP_404_NOT_FOUND)
 
-        page.save()
+            # Save HTML content
+            page.html = html_content
+            page.save()
 
-        return Response({
-            "id": page.id,
-            "page_type": page.page_type,
-            "url": page.url,
-            "business": business.id,
-            "user_id": user.id,
-            "html_path": page.html,
-            "css_path": page.css,
-            "screenshot_path": page.screenshot
-        }, status=status.HTTP_201_CREATED)
+            css_resp = requests.get(f"http://proto-api-kg9r.onrender.com/toolkit/business-css/?page_id={page.id}")
+            if css_resp.ok:
+                css_data = css_resp.json()
+                css_dir = os.path.join(settings.BASE_DIR, 'Records', 'CSS', str(business.id), str(page.id))
+                os.makedirs(css_dir, exist_ok=True)
+                css_path = os.path.join(css_dir, 'business_css.json')
+                with open(css_path, 'w', encoding='utf-8') as f:
+                    json.dump(css_data, f, ensure_ascii=False, indent=2)
+                page.css = os.path.relpath(css_path, settings.BASE_DIR)
+
+            try:
+                ss_api_resp = requests.get(
+                    f"http://proto-api-kg9r.onrender.com/toolkit/take-screenshot/?page_id={page.id}",
+                    timeout=60
+                )
+                if ss_api_resp.ok:
+                    data = ss_api_resp.json()
+                    shot_url = data.get("screenshot_url")
+                    if shot_url:
+                        down = requests.get(shot_url, timeout=120)
+                        if down.ok:
+                            ss_dir = os.path.join(settings.BASE_DIR, 'Records', 'SS', str(business.id))
+                            os.makedirs(ss_dir, exist_ok=True)
+                            ss_path = os.path.join(ss_dir, f'screenshot_{page.id}.png')
+                            with open(ss_path, 'wb') as f:
+                                f.write(down.content)
+                            page.screenshot = os.path.relpath(ss_path, settings.BASE_DIR)
+            except (requests.RequestException, ValueError):
+                pass
+
+            page.save()
+
+            return Response({
+                "id": page.id,
+                "page_type": page.page_type,
+                "url": page.url,
+                "business": business.id,
+                "user_id": user.id,
+                "html_path": page.html,
+                "css_path": page.css,
+                "screenshot_path": page.screenshot
+            }, status=status.HTTP_201_CREATED)
+
+        except requests.RequestException as e:
+            return Response({"error": f"Failed to fetch HTML: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class ScreenshotUploadAPIView(APIView):
