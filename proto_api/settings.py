@@ -49,6 +49,7 @@ INSTALLED_APPS = [
 AUTH_USER_MODEL = 'Auth.User'
 
 MIDDLEWARE = [
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -56,8 +57,14 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+        'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware',
 ]
+
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATIC_URL = '/static/'
+
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 CORS_ALLOW_ALL_ORIGINS = True 
 CORS_ALLOW_CREDENTIALS = True
