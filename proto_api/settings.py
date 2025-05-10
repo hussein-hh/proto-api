@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'Domains',
     'django_extensions',
+    'explorer',
 ]
 
 AUTH_USER_MODEL = 'Auth.User'
