@@ -11,6 +11,7 @@ import requests
 from rest_framework.parsers import MultiPartParser
 from django.core.validators import URLValidator
 from django.core.exceptions import ValidationError
+from Domains.Toolkit.views import BusinessHTMLAPIView
 
 User = get_user_model()
 
@@ -179,14 +180,15 @@ class PageOnboardingAPIView(APIView):
             os.makedirs(path, exist_ok=True)
             return path
 
-        html_resp = requests.get(f"http://proto-api-kg9r.onrender.com/toolkit/business-html/?page_id={page.id}")
-        if html_resp.ok:
-            html_data = html_resp.json()
-            html_dir = make_dir('Records', 'HTML', str(business.id), str(page.id))
-            html_path = os.path.join(html_dir, 'business_html.json')
-            with open(html_path, 'w', encoding='utf-8') as f:
-                json.dump(html_data, f, ensure_ascii=False, indent=2)
-            page.html = os.path.relpath(html_path, settings.BASE_DIR)
+        # Fetch HTML content directly using the view
+        html_view = BusinessHTMLAPIView()
+        html_response = html_view.get(request._request, page_id=page.id)
+        if html_response.status_code != 200:
+            return Response({"error": "Failed to fetch HTML content"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        html_content = html_response.data.get("html", "")
+        if not html_content:
+            return Response({"error": "No HTML content found"}, status=status.HTTP_404_NOT_FOUND)
 
         css_resp = requests.get(f"http://proto-api-kg9r.onrender.com/toolkit/business-css/?page_id={page.id}")
         if css_resp.ok:
