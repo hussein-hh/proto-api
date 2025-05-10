@@ -9,3 +9,4 @@ groq
 Pillow
 openai
 gunicorn>=20.1.0
+django_extensions
