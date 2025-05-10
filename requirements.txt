@@ -14,3 +14,4 @@ requests
 bs4
 psycopg2-binary>=2.9.0
 dj-database-url>=1.0.0
+whitenoise
