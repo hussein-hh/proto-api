@@ -49,7 +49,7 @@ INSTALLED_APPS = [
 
     # Utilities
     "django_extensions",
-    "explorer.apps.ExplorerConfig",
+    "explorer.apps.ExplorerAppConfig",
 ]
 
 # Middleware
