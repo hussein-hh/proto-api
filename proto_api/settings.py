@@ -97,7 +97,6 @@ CORS_ALLOWED_HEADERS = [
 ]
 CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
 CORS_PREFLIGHT_MAX_AGE = 86400  # 24 hours
-CORS_REPLACE_HTTPS_REFERER = True
 
 import os
 from dotenv import load_dotenv
