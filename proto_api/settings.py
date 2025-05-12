@@ -49,7 +49,7 @@ INSTALLED_APPS = [
 
     # Utilities
     "django_extensions",
-    "explorer",
+    "explorer.apps.ExplorerConfig",
 ]
 
 # Middleware
@@ -117,6 +117,7 @@ DATABASES = {
     "default": dj_database_url.config(
         default=os.getenv("DATABASE_URL"),
         conn_max_age=600,
+        ssl_require=True  # Enable SSL for database connections
     )
 }
 
@@ -127,6 +128,24 @@ AUTH_USER_MODEL = "Auth.User"
 EXPLORER_CONNECTIONS = {"default": "default"}
 EXPLORER_ALLOW_MUTATIONS = True
 EXPLORER_SQL_BLACKLIST = []
+EXPLORER_SCHEMA_EXCLUDE_TABLE_PREFIXES = (
+    'auth_',
+    'contenttypes_',
+    'sessions_',
+    'admin_',
+    'django_',
+)
+EXPLORER_SCHEMA_INCLUDE_TABLE_PREFIXES = ()
+EXPLORER_SCHEMA_INCLUDE_VIEWS = True
+EXPLORER_TOKEN = 'your-secret-token'  # Change this to a secure value
+EXPLORER_PERMISSION_VIEW = lambda u: u.is_staff
+EXPLORER_PERMISSION_CHANGE = lambda u: u.is_superuser
+EXPLORER_ASYNC_SCHEMA = True
+EXPLORER_DATA_EXPORTERS = [
+    ('csv', 'explorer.exporters.CSVExporter'),
+    ('excel', 'explorer.exporters.ExcelExporter'),
+    ('json', 'explorer.exporters.JSONExporter'),
+]
 
 # DRF
 REST_FRAMEWORK = {
