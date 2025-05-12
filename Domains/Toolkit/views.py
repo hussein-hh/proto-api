@@ -53,7 +53,7 @@ def get_web_performance(url):
 
     api_url = f"https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={url}&strategy=mobile&key={api_key}"
     try:
-        response = requests.get(api_url, timeout=30)
+        response = requests.get(api_url, timeout=300)
         response.raise_for_status()
         data = response.json()
         
