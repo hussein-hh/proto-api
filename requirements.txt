@@ -17,3 +17,4 @@ dj-database-url>=1.0.0
 whitenoise
 django-sql-explorer
 cloudinary
+dj_database_url
