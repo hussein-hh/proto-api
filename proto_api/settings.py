@@ -202,7 +202,7 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-PAGESPEED_API_KEY = "AIzaSyBbuppk5bZg9Js9exxJxchuaOQ5XdT5hR8"
+PAGESPEED_API_KEY = os.getenv('PAGESPEED_API_KEY', 'AIzaSyBbuppk5bZg9Js9exxJxchuaOQ5XdT5hR8')  # Fallback to old key if not set
 
 CACHES = {
     "default": {

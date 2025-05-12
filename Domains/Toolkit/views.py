@@ -48,21 +48,36 @@ def get_web_performance(url):
         return cached_data
 
     api_key = settings.PAGESPEED_API_KEY
+    if not api_key:
+        raise ValueError("PageSpeed API key is not configured")
+
     api_url = f"https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={url}&strategy=mobile&key={api_key}"
-    response = requests.get(api_url)
-    data = response.json()
+    try:
+        response = requests.get(api_url, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        if "error" in data:
+            raise ValueError(f"PageSpeed API error: {data['error']['message']}")
 
-    metrics = {
-        "First Contentful Paint": data["lighthouseResult"]["audits"]["first-contentful-paint"]["displayValue"],
-        "Speed Index": data["lighthouseResult"]["audits"]["speed-index"]["displayValue"],
-        "Largest Contentful Paint (LCP)": data["lighthouseResult"]["audits"]["largest-contentful-paint"]["displayValue"],
-        "Time to Interactive": data["lighthouseResult"]["audits"]["interactive"]["displayValue"],
-        "Total Blocking Time (TBT)": data["lighthouseResult"]["audits"]["total-blocking-time"]["displayValue"],
-        "Cumulative Layout Shift (CLS)": data["lighthouseResult"]["audits"]["cumulative-layout-shift"]["displayValue"]
-    }
+        if "lighthouseResult" not in data or "audits" not in data["lighthouseResult"]:
+            raise ValueError("Invalid response format from PageSpeed API")
 
-    cache.set(cache_key, metrics, timeout=60 * 60)
-    return metrics
+        metrics = {
+            "First Contentful Paint": data["lighthouseResult"]["audits"]["first-contentful-paint"]["displayValue"],
+            "Speed Index": data["lighthouseResult"]["audits"]["speed-index"]["displayValue"],
+            "Largest Contentful Paint (LCP)": data["lighthouseResult"]["audits"]["largest-contentful-paint"]["displayValue"],
+            "Time to Interactive": data["lighthouseResult"]["audits"]["interactive"]["displayValue"],
+            "Total Blocking Time (TBT)": data["lighthouseResult"]["audits"]["total-blocking-time"]["displayValue"],
+            "Cumulative Layout Shift (CLS)": data["lighthouseResult"]["audits"]["cumulative-layout-shift"]["displayValue"]
+        }
+
+        cache.set(cache_key, metrics, timeout=60 * 60)
+        return metrics
+    except requests.exceptions.RequestException as e:
+        raise ValueError(f"Failed to fetch metrics from PageSpeed API: {str(e)}")
+    except (KeyError, json.JSONDecodeError) as e:
+        raise ValueError(f"Invalid response from PageSpeed API: {str(e)}")
 
 class WebMetricsAPIView(APIView):
     def get(self, request, format=None):
@@ -117,22 +132,27 @@ class WebMetricsAPIView(APIView):
             except json.JSONDecodeError:
                 pass
 
-        # If no stored metrics or corrupted, fetch new ones
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future_metrics = executor.submit(get_web_performance, target_url)
-            metrics_result = future_metrics.result()
+        try:
+            # If no stored metrics or corrupted, fetch new ones
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future_metrics = executor.submit(get_web_performance, target_url)
+                metrics_result = future_metrics.result()
 
-        # Save metrics to file
-        os.makedirs(metrics_dir, exist_ok=True)
-        metrics_data = {f"{business.name} metrics": metrics_result}
-        with open(metrics_path, 'w', encoding='utf-8') as f:
-            json.dump(metrics_data, f, ensure_ascii=False, indent=2)
-        
-        # Store the relative path in the wpm field
-        page.wpm = os.path.relpath(metrics_path)
-        page.save()
+            # Save metrics to file
+            os.makedirs(metrics_dir, exist_ok=True)
+            metrics_data = {f"{business.name} metrics": metrics_result}
+            with open(metrics_path, 'w', encoding='utf-8') as f:
+                json.dump(metrics_data, f, ensure_ascii=False, indent=2)
+            
+            # Store the relative path in the wpm field
+            page.wpm = os.path.relpath(metrics_path)
+            page.save()
 
-        return Response(metrics_data, status=status.HTTP_200_OK)
+            return Response(metrics_data, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+        except Exception as e:
+            return Response({"error": f"Failed to get web metrics: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class RoleModelWebMetricsAPIView(APIView):
 
