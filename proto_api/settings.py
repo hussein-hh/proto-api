@@ -27,7 +27,13 @@ SECRET_KEY = 'django-insecure-*y&q4#dfyt@m7-x_ifk2xsj#n$6ayd$8r2-p)in$ozh8k7u%64
 DEBUG = True
 
 RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
-ALLOWED_HOSTS = [RENDER_EXTERNAL_HOSTNAME] if RENDER_EXTERNAL_HOSTNAME else []
+ALLOWED_HOSTS = [
+    'proto-api-kg9r.onrender.com',
+    'localhost',
+    '127.0.0.1',
+]
+if RENDER_EXTERNAL_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
 # Application definition
 
@@ -97,6 +103,12 @@ CORS_ALLOWED_HEADERS = [
 ]
 CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
 CORS_PREFLIGHT_MAX_AGE = 86400  # 24 hours
+CORS_ORIGIN_ALLOW_ALL = True  # Allow all origins
+CORS_ALLOW_CREDENTIALS = True
+CORS_ORIGIN_WHITELIST = [
+    'https://proto-ux.netlify.app',
+    'http://localhost:3000',
+]
 
 import os
 from dotenv import load_dotenv
