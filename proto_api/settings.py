@@ -61,10 +61,10 @@ EXPLORER_ALLOW_MUTATIONS = True
 EXPLORER_SQL_BLACKLIST = []
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # Must be at the top
+    'django.middleware.common.CommonMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -80,6 +80,7 @@ CORS_ALLOW_ALL_ORIGINS = True  # Temporarily allow all origins for debugging
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "https://proto-ux.netlify.app",
+    "https://proto-ux.netlify.app/",
     "http://localhost:3000",
 ]
 CORS_ALLOWED_METHODS = [
