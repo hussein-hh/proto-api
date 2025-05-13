@@ -9,7 +9,7 @@ groq
 Pillow
 openai
 celery
-django-sql-explorer
+django-sql-explorer==2.1.3
 cloudinary
 dj_database_url
 redis>=4.5.0
