@@ -52,4 +52,36 @@ class SqlExplorerMiddleware:
                     raise
         else:
             # For non-SQL Explorer URLs, just proceed normally
-            return self.get_response(request) 
+            return self.get_response(request)
+
+
+class CorsFixMiddleware:
+    """
+    Custom middleware to ensure CORS headers are added even in case of errors.
+    This addresses issues with CORS headers not being added by Django CORS headers
+    middleware in certain scenarios.
+    """
+    
+    def __init__(self, get_response):
+        self.get_response = get_response
+        
+    def __call__(self, request):
+        response = self.get_response(request)
+        
+        # Add CORS headers to all responses from specific paths
+        # These are paths where we know CORS errors are happening
+        if request.path.startswith('/toolkit/web-metrics/'):
+            origin = request.META.get('HTTP_ORIGIN')
+            
+            # If an origin was specified, add it to the allow origin header
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+            else:
+                # Fallback to the main frontend domain if no origin was specified
+                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+                
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+            response["Access-Control-Allow-Credentials"] = "true"
+            
+        return response 
