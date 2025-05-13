@@ -30,10 +30,7 @@ if RENDER_EXTERNAL_HOSTNAME:
 
 # Apps
 INSTALLED_APPS = [
-    # CORS must come first
-    "corsheaders",
-
-    # Django core
+    # Django core apps first
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -53,14 +50,15 @@ INSTALLED_APPS = [
     # Utilities
     "django_extensions",
     "explorer",
+    
+    # Commented out due to CORS header duplication issues
+    # "corsheaders",
 ]
 
 # Middleware
 MIDDLEWARE = [
-    "proto_api.middleware.CorsFixMiddleware",            # ← add our custom CORS fix middleware
-    "corsheaders.middleware.CorsMiddleware",             # ← must be at top
-    "proto_api.middleware.SqlExplorerMiddleware",        # ← add our SQL Explorer middleware
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "proto_api.middleware.CorsFixMiddleware",            # Our custom CORS middleware handles all CORS
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -68,19 +66,10 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "proto_api.middleware.SqlExplorerMiddleware",
 ]
 
 # CORS configuration
-# Allow all origins
-CORS_ALLOW_ALL_ORIGINS = True
-
-# The specific origins are ignored when CORS_ALLOW_ALL_ORIGINS is True
-# Keeping them as a reference
-# CORS_ALLOWED_ORIGINS = [
-#     "https://proto-ux.netlify.app",
-#     "http://localhost:3000",
-# ]
-
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = [
     "DELETE",
@@ -101,6 +90,13 @@ CORS_ALLOW_HEADERS = [
     "x-csrftoken",
     "x-requested-with",
 ]
+
+# Add CORS debugging
+if DEBUG:
+    LOGGING['loggers']['proto_api.middleware'] = {
+        'handlers': ['console'],
+        'level': 'DEBUG',
+    }
 
 # URL & WSGI
 ROOT_URLCONF = "proto_api.urls"

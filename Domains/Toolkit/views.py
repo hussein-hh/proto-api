@@ -29,37 +29,6 @@ from Domains.Onboard.models import Business, Page, RoleModelPage
 
 User = get_user_model()
 
-# A decorator to add CORS headers to specific views
-def add_cors_headers(view_func):
-    @functools.wraps(view_func)
-    def wrapped_view(*args, **kwargs):
-        # Get the response from the view
-        response = view_func(*args, **kwargs)
-        
-        # Add CORS headers to the response only if they don't already exist
-        if args and hasattr(args[0], 'META'):
-            request = args[0]
-            
-            # Only add the header if it doesn't already exist
-            if 'Access-Control-Allow-Origin' not in response:
-                origin = request.META.get('HTTP_ORIGIN')
-                if origin:
-                    response["Access-Control-Allow-Origin"] = origin
-                else:
-                    response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
-                    
-            if 'Access-Control-Allow-Methods' not in response:
-                response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-                
-            if 'Access-Control-Allow-Headers' not in response:
-                response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
-                
-            if 'Access-Control-Allow-Credentials' not in response:
-                response["Access-Control-Allow-Credentials"] = "true"
-                
-        return response
-    return wrapped_view
-
 def get_user_from_token(token):
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
@@ -112,9 +81,6 @@ def get_web_performance(url):
     except (KeyError, json.JSONDecodeError) as e:
         raise ValueError(f"Invalid response from PageSpeed API: {str(e)}")
 
-# Apply the CORS decorator to the WebMetricsAPIView methods
-@method_decorator(add_cors_headers, name='get')
-@method_decorator(add_cors_headers, name='options')
 class WebMetricsAPIView(APIView):
     def get(self, request, format=None):
         auth_header = request.headers.get('Authorization')
