@@ -8,3 +8,4 @@ django-cors-headers
 groq
 Pillow
 openai
+celery
