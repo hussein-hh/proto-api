@@ -173,10 +173,11 @@ REST_FRAMEWORK = {
 # Static files
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_DIRS = [
-    BASE_DIR / "static",
-    BASE_DIR / "explorer" / "static",  # Add SQL Explorer static files
-]
+# Remove non-existent directories
+# STATICFILES_DIRS = [
+#     BASE_DIR / "static",
+#     BASE_DIR / "explorer" / "static",  # Add SQL Explorer static files
+# ]
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # JWT
