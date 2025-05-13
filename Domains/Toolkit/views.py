@@ -83,39 +83,119 @@ class WebMetricsAPIView(APIView):
     def get(self, request, format=None):
         auth_header = request.headers.get('Authorization')
         if not auth_header:
-            return Response({'error': 'Authorization header is required.'}, status=status.HTTP_401_UNAUTHORIZED)
+            response = Response({'error': 'Authorization header is required.'}, status=status.HTTP_401_UNAUTHORIZED)
+            # Add CORS headers directly to the response
+            origin = request.META.get('HTTP_ORIGIN')
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+            else:
+                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
 
         parts = auth_header.split()
         if len(parts) != 2 or parts[0].lower() != 'bearer':
-            return Response({'error': 'Authorization header must be in the format: Bearer <token>'}, status=status.HTTP_401_UNAUTHORIZED)
+            response = Response({'error': 'Authorization header must be in the format: Bearer <token>'}, status=status.HTTP_401_UNAUTHORIZED)
+            # Add CORS headers
+            origin = request.META.get('HTTP_ORIGIN')
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+            else:
+                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
 
         token = parts[1]
         try:
             decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
             user_id = decoded_token.get('user_id')
             if not user_id:
-                return Response({'error': 'Token is missing user ID.'}, status=status.HTTP_401_UNAUTHORIZED)
+                response = Response({'error': 'Token is missing user ID.'}, status=status.HTTP_401_UNAUTHORIZED)
+                # Add CORS headers
+                origin = request.META.get('HTTP_ORIGIN')
+                if origin:
+                    response["Access-Control-Allow-Origin"] = origin
+                else:
+                    response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+                response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+                response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+                response["Access-Control-Allow-Credentials"] = "true"
+                return response
             user = User.objects.get(id=user_id)
         except Exception as e:
-            return Response({'error': f'Invalid or expired token: {str(e)}'}, status=status.HTTP_401_UNAUTHORIZED)
+            response = Response({'error': f'Invalid or expired token: {str(e)}'}, status=status.HTTP_401_UNAUTHORIZED)
+            # Add CORS headers
+            origin = request.META.get('HTTP_ORIGIN')
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+            else:
+                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
 
         try:
             business = Business.objects.get(user=user)
         except Business.DoesNotExist:
-            return Response({"error": "Business not found for the authenticated user."}, status=status.HTTP_404_NOT_FOUND)
+            response = Response({"error": "Business not found for the authenticated user."}, status=status.HTTP_404_NOT_FOUND)
+            # Add CORS headers
+            origin = request.META.get('HTTP_ORIGIN')
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+            else:
+                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
 
         page_id = request.query_params.get('page_id')
         if not page_id:
-            return Response({"error": "Missing required query parameter: page_id"}, status=status.HTTP_400_BAD_REQUEST)
+            response = Response({"error": "Missing required query parameter: page_id"}, status=status.HTTP_400_BAD_REQUEST)
+            # Add CORS headers
+            origin = request.META.get('HTTP_ORIGIN')
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+            else:
+                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
 
         try:
             page = Page.objects.get(id=page_id, business=business)
             target_url = page.url
         except Page.DoesNotExist:
-            return Response({"error": "Page not found for the given page_id and user."}, status=status.HTTP_404_NOT_FOUND)
+            response = Response({"error": "Page not found for the given page_id and user."}, status=status.HTTP_404_NOT_FOUND)
+            # Add CORS headers
+            origin = request.META.get('HTTP_ORIGIN')
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+            else:
+                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
 
         if not target_url:
-            return Response({"error": "Page URL is empty or missing."}, status=status.HTTP_400_BAD_REQUEST)
+            response = Response({"error": "Page URL is empty or missing."}, status=status.HTTP_400_BAD_REQUEST)
+            # Add CORS headers
+            origin = request.META.get('HTTP_ORIGIN')
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+            else:
+                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
 
         # Check if metrics already exist
         metrics_dir = os.path.join('Records', 'web_metrics', 'business')
@@ -128,7 +208,18 @@ class WebMetricsAPIView(APIView):
                     # Store the relative path in the wpm field
                     page.wpm = os.path.relpath(metrics_path)
                     page.save()
-                return Response(stored_metrics, status=status.HTTP_200_OK)
+                
+                response = Response(stored_metrics, status=status.HTTP_200_OK)
+                # Add CORS headers
+                origin = request.META.get('HTTP_ORIGIN')
+                if origin:
+                    response["Access-Control-Allow-Origin"] = origin
+                else:
+                    response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+                response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+                response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+                response["Access-Control-Allow-Credentials"] = "true"
+                return response
             except json.JSONDecodeError:
                 pass
 
@@ -148,48 +239,151 @@ class WebMetricsAPIView(APIView):
             page.wpm = os.path.relpath(metrics_path)
             page.save()
 
-            return Response(metrics_data, status=status.HTTP_200_OK)
+            response = Response(metrics_data, status=status.HTTP_200_OK)
+            # Add CORS headers
+            origin = request.META.get('HTTP_ORIGIN')
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+            else:
+                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
         except ValueError as e:
-            return Response({"error": str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+            response = Response({"error": str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+            # Add CORS headers
+            origin = request.META.get('HTTP_ORIGIN')
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+            else:
+                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
         except Exception as e:
-            return Response({"error": f"Failed to get web metrics: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            response = Response({"error": f"Failed to get web metrics: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # Add CORS headers
+            origin = request.META.get('HTTP_ORIGIN')
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+            else:
+                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
+
+    def options(self, request, *args, **kwargs):
+        """Handle preflight OPTIONS requests"""
+        response = Response()
+        origin = request.META.get('HTTP_ORIGIN')
+        if origin:
+            response["Access-Control-Allow-Origin"] = origin
+        else:
+            response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+        response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+        response["Access-Control-Allow-Credentials"] = "true"
+        return response
 
 class RoleModelWebMetricsAPIView(APIView):
 
     def get(self, request, format=None):
         page_id = request.query_params.get('page_id')
         if not page_id:
-            return Response({"error": "Missing required query parameter: page_id"},
+            response = Response({"error": "Missing required query parameter: page_id"},
                             status=status.HTTP_400_BAD_REQUEST)
+            # Add CORS headers
+            origin = request.META.get('HTTP_ORIGIN')
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+            else:
+                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
 
         try:
             page = Page.objects.get(id=page_id)
         except Page.DoesNotExist:
-            return Response({"error": "Page not found for the given page_id"},
+            response = Response({"error": "Page not found for the given page_id"},
                             status=status.HTTP_404_NOT_FOUND)
+            # Add CORS headers
+            origin = request.META.get('HTTP_ORIGIN')
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+            else:
+                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
 
         if not getattr(page, 'business', None):
-            return Response({"error": "Page is not associated with any business."},
+            response = Response({"error": "Page is not associated with any business."},
                             status=status.HTTP_400_BAD_REQUEST)
+            # Add CORS headers
+            origin = request.META.get('HTTP_ORIGIN')
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+            else:
+                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
         business = page.business
 
         role_model = getattr(business, 'role_model', None)
         if not role_model:
-            return Response({"error": "Business does not have an associated role model."},
+            response = Response({"error": "Business does not have an associated role model."},
                             status=status.HTTP_404_NOT_FOUND)
+            # Add CORS headers
+            origin = request.META.get('HTTP_ORIGIN')
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+            else:
+                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
 
         page_type = page.page_type
 
         try:
             rm_page = RoleModelPage.objects.get(role_model=role_model, page_type=page_type)
         except RoleModelPage.DoesNotExist:
-            return Response({"error": f"No URL configured for '{page_type}' in role model pages."},
+            response = Response({"error": f"No URL configured for '{page_type}' in role model pages."},
                             status=status.HTTP_404_NOT_FOUND)
+            # Add CORS headers
+            origin = request.META.get('HTTP_ORIGIN')
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+            else:
+                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
 
         role_model_url = getattr(rm_page, 'url', None)
         if not role_model_url:
-            return Response({"error": f"No URL set on RoleModelPage for '{page_type}'."},
+            response = Response({"error": f"No URL set on RoleModelPage for '{page_type}'."},
                             status=status.HTTP_400_BAD_REQUEST)
+            # Add CORS headers
+            origin = request.META.get('HTTP_ORIGIN')
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+            else:
+                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+            response["Access-Control-Allow-Credentials"] = "true"
+            return response
 
         # Check if metrics already exist
         metrics_dir = os.path.join('Records', 'web_metrics', 'role_model')
@@ -202,7 +396,17 @@ class RoleModelWebMetricsAPIView(APIView):
                     # Store the relative path in the wpm field
                     rm_page.wpm = os.path.relpath(metrics_path)
                     rm_page.save()
-                return Response(stored_metrics, status=status.HTTP_200_OK)
+                response = Response(stored_metrics, status=status.HTTP_200_OK)
+                # Add CORS headers
+                origin = request.META.get('HTTP_ORIGIN')
+                if origin:
+                    response["Access-Control-Allow-Origin"] = origin
+                else:
+                    response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+                response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+                response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+                response["Access-Control-Allow-Credentials"] = "true"
+                return response
             except json.JSONDecodeError:
                 pass
 
@@ -220,8 +424,30 @@ class RoleModelWebMetricsAPIView(APIView):
         rm_page.save()
 
         response_key = f"{role_model.name} {page_type} metrics"
-        return Response({response_key: metrics_result}, status=status.HTTP_200_OK)
-
+        response = Response({response_key: metrics_result}, status=status.HTTP_200_OK)
+        # Add CORS headers
+        origin = request.META.get('HTTP_ORIGIN')
+        if origin:
+            response["Access-Control-Allow-Origin"] = origin
+        else:
+            response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+        response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+        response["Access-Control-Allow-Credentials"] = "true"
+        return response
+        
+    def options(self, request, *args, **kwargs):
+        """Handle preflight OPTIONS requests"""
+        response = Response()
+        origin = request.META.get('HTTP_ORIGIN')
+        if origin:
+            response["Access-Control-Allow-Origin"] = origin
+        else:
+            response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+        response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+        response["Access-Control-Allow-Credentials"] = "true"
+        return response
 
 class PageHTMLAPIView(APIView):
     def _build_dom_outline(self, soup, text_limit=50):

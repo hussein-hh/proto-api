@@ -66,22 +66,72 @@ class CorsFixMiddleware:
         self.get_response = get_response
         
     def __call__(self, request):
-        response = self.get_response(request)
+        # Check if this is an OPTIONS request that needs CORS headers
+        is_options = request.method == 'OPTIONS'
         
-        # Add CORS headers to all responses from specific paths
-        # These are paths where we know CORS errors are happening
-        if request.path.startswith('/toolkit/web-metrics/'):
-            origin = request.META.get('HTTP_ORIGIN')
+        # Track if this is a request that might need CORS headers
+        needs_cors = False
+        
+        # Specific handling for the problematic endpoint
+        if '/toolkit/web-metrics/business/' in request.path:
+            logger.info(f"CorsFixMiddleware: Handling problematic endpoint {request.path}")
+            needs_cors = True
+        # General check for any web-metrics path
+        elif '/toolkit/web-metrics/' in request.path:
+            needs_cors = True
+            logger.info(f"CorsFixMiddleware: Processing request for {request.path}")
+        
+        # Handle preflight OPTIONS requests immediately with CORS headers
+        if is_options:
+            logger.info(f"CorsFixMiddleware: Handling OPTIONS request for {request.path}")
+            response = self.build_cors_preflight_response(request)
+            return response
             
-            # If an origin was specified, add it to the allow origin header
-            if origin:
-                response["Access-Control-Allow-Origin"] = origin
-            else:
-                # Fallback to the main frontend domain if no origin was specified
-                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
-                
-            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
-            response["Access-Control-Allow-Credentials"] = "true"
+        # Get the response from the next middleware/view
+        try:
+            response = self.get_response(request)
+        except Exception as e:
+            # If there's an exception, log it and add CORS headers to the error response
+            logger.error(f"CorsFixMiddleware: Exception caught: {str(e)}")
+            # Re-raise if we don't need CORS headers
+            if not needs_cors:
+                raise
+            # Create a new response with CORS headers
+            from django.http import JsonResponse
+            response = JsonResponse({"error": str(e)}, status=500)
+            self.add_cors_headers(request, response)
+            return response
+        
+        # Add CORS headers if needed
+        if needs_cors:
+            self.add_cors_headers(request, response)
+            # Log the response status and headers for debugging
+            logger.info(f"CorsFixMiddleware: Response status: {response.status_code}")
+            logger.info(f"CorsFixMiddleware: Response headers: {dict(response.headers)}")
+        
+        return response
+    
+    def add_cors_headers(self, request, response):
+        """Helper method to add CORS headers to a response"""
+        origin = request.META.get('HTTP_ORIGIN')
+        
+        # If an origin was specified, add it to the allow origin header
+        if origin:
+            logger.info(f"CorsFixMiddleware: Adding CORS headers for origin {origin}")
+            response["Access-Control-Allow-Origin"] = origin
+        else:
+            # Fallback to the main frontend domain if no origin was specified
+            response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+            logger.info("CorsFixMiddleware: Adding CORS headers with fallback origin")
             
+        response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+        response["Access-Control-Allow-Credentials"] = "true"
+        return response
+    
+    def build_cors_preflight_response(self, request):
+        """Build a response for OPTIONS preflight requests"""
+        from django.http import HttpResponse
+        response = HttpResponse()
+        self.add_cors_headers(request, response)
         return response 

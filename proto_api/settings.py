@@ -57,6 +57,7 @@ INSTALLED_APPS = [
 
 # Middleware
 MIDDLEWARE = [
+    "proto_api.middleware.CorsFixMiddleware",            # ← add our custom CORS fix middleware
     "corsheaders.middleware.CorsMiddleware",             # ← must be at top
     "proto_api.middleware.SqlExplorerMiddleware",        # ← add our SQL Explorer middleware
     "whitenoise.middleware.WhiteNoiseMiddleware",
