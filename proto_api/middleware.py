@@ -1,5 +1,6 @@
 from django.db import connection
 from django.db.utils import DatabaseError, IntegrityError, OperationalError
+from django.http import HttpResponse
 import logging
 
 logger = logging.getLogger(__name__)
@@ -64,28 +65,56 @@ class CorsFixMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
         self.allowed_origin = 'https://proto-ux.netlify.app'
+        self.allowed_methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+        self.allowed_headers = [
+            'accept',
+            'accept-encoding',
+            'authorization',
+            'content-type',
+            'dnt',
+            'origin',
+            'user-agent',
+            'x-csrftoken',
+            'x-requested-with',
+        ]
         
     def __call__(self, request):
         logger.debug(f"CorsFixMiddleware processing request: {request.method} {request.path}")
         
-        # Special handling for OPTIONS requests (CORS preflight)
+        # Handle OPTIONS requests first
         if request.method == 'OPTIONS':
-            logger.debug("Handling OPTIONS preflight request")
             return self.handle_preflight(request)
-        
-        # Process the request and get the response
+            
+        # For non-OPTIONS requests, process normally
         response = self.get_response(request)
-        
-        # Add CORS headers to all responses
         return self.add_cors_headers(request, response)
     
     def handle_preflight(self, request):
         """Handle preflight OPTIONS requests"""
-        from django.http import HttpResponse
+        logger.debug("Handling OPTIONS preflight request")
         
         response = HttpResponse()
-        response.status_code = 200
-        return self.add_cors_headers(request, response)
+        response.status_code = 200  # Always return 200 for OPTIONS
+        
+        # Get the requested method
+        requested_method = request.META.get('HTTP_ACCESS_CONTROL_REQUEST_METHOD', '')
+        logger.debug(f"Requested method: {requested_method}")
+        
+        # Get the requested headers
+        requested_headers = request.META.get('HTTP_ACCESS_CONTROL_REQUEST_HEADERS', '').lower()
+        logger.debug(f"Requested headers: {requested_headers}")
+        
+        # Add CORS headers
+        response = self.add_cors_headers(request, response)
+        
+        # Add specific preflight headers
+        if requested_method:
+            response['Access-Control-Allow-Methods'] = ', '.join(self.allowed_methods)
+        
+        if requested_headers:
+            response['Access-Control-Allow-Headers'] = ', '.join(self.allowed_headers)
+        
+        return response
     
     def add_cors_headers(self, request, response):
         """Add CORS headers to a response"""
@@ -99,19 +128,17 @@ class CorsFixMiddleware:
             del response[header]
             logger.debug(f"Removed existing header: {header}")
         
-        # Always set the allowed origin header
+        # Set the allowed origin
         if origin == self.allowed_origin:
             response['Access-Control-Allow-Origin'] = origin
         else:
             response['Access-Control-Allow-Origin'] = self.allowed_origin
         
-        # Add the other CORS headers
-        response['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS, PUT, DELETE'
-        response['Access-Control-Allow-Headers'] = 'Authorization, Content-Type, X-Requested-With, Origin, Accept'
+        # Add standard CORS headers
         response['Access-Control-Allow-Credentials'] = 'true'
-        response['Access-Control-Max-Age'] = '86400'  # 24 hours
+        response['Access-Control-Max-Age'] = '3600'  # 1 hour
         
-        # Log the final headers for debugging
+        # Log the final headers
         logger.debug("Final CORS headers:")
         for header, value in response.items():
             if header.lower().startswith('access-control-'):

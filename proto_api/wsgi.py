@@ -13,29 +13,66 @@ from django.core.wsgi import get_wsgi_application
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'proto_api.settings')
 application = get_wsgi_application()
 
-# This WSGI middleware only handles emergency fallback for OPTIONS requests
+# WSGI middleware for CORS handling
 class CorsWsgiMiddleware:
     def __init__(self, app):
         self.app = app
         self.allowed_origin = 'https://proto-ux.netlify.app'
+        self.allowed_methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+        self.allowed_headers = [
+            'accept',
+            'accept-encoding',
+            'authorization',
+            'content-type',
+            'dnt',
+            'origin',
+            'user-agent',
+            'x-csrftoken',
+            'x-requested-with',
+        ]
 
     def __call__(self, environ, start_response):
+        # Handle OPTIONS requests at WSGI level
+        if environ.get('REQUEST_METHOD') == 'OPTIONS':
+            return self.handle_options(environ, start_response)
+
         def custom_start_response(status, headers, exc_info=None):
-            # Check if CORS headers are present
-            has_cors = any(h[0].lower() == 'access-control-allow-origin' for h in headers)
+            # Ensure CORS headers are present
+            cors_headers = []
+            has_origin = False
             
-            if not has_cors and environ.get('REQUEST_METHOD') == 'OPTIONS':
-                # Only add CORS headers for OPTIONS if they're missing
-                headers.extend([
+            # Check existing headers
+            for name, value in headers:
+                if name.lower() == 'access-control-allow-origin':
+                    has_origin = True
+            
+            # Add CORS headers if missing
+            if not has_origin:
+                cors_headers = [
                     ('Access-Control-Allow-Origin', self.allowed_origin),
-                    ('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE'),
-                    ('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Requested-With, Origin, Accept'),
                     ('Access-Control-Allow-Credentials', 'true'),
-                    ('Access-Control-Max-Age', '86400'),
-                ])
+                    ('Access-Control-Allow-Methods', ', '.join(self.allowed_methods)),
+                    ('Access-Control-Allow-Headers', ', '.join(self.allowed_headers)),
+                    ('Access-Control-Max-Age', '3600'),
+                ]
+            
+            headers.extend(cors_headers)
             return start_response(status, headers, exc_info)
 
         return self.app(environ, custom_start_response)
+
+    def handle_options(self, environ, start_response):
+        # Always return 200 OK for OPTIONS with CORS headers
+        headers = [
+            ('Content-Type', 'text/plain'),
+            ('Access-Control-Allow-Origin', self.allowed_origin),
+            ('Access-Control-Allow-Methods', ', '.join(self.allowed_methods)),
+            ('Access-Control-Allow-Headers', ', '.join(self.allowed_headers)),
+            ('Access-Control-Allow-Credentials', 'true'),
+            ('Access-Control-Max-Age', '3600'),
+        ]
+        start_response('200 OK', headers)
+        return [b'']
 
 # Wrap the application with our CORS WSGI middleware
 application = CorsWsgiMiddleware(application)
