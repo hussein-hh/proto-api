@@ -18,3 +18,4 @@ psycopg2-binary>=2.9.9
 bs4
 gunicorn>=21.2.0
 whitenoise>=6.6.0
+requests
