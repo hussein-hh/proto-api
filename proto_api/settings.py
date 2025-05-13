@@ -46,6 +46,9 @@ INSTALLED_APPS = [
     "Domains.ManageData",
     "Domains.Onboard",
     "Domains",
+    
+    # Proto API itself
+    "proto_api.apps.ProtoApiConfig",
 
     # Utilities
     "django_extensions",
