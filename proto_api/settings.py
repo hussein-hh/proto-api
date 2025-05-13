@@ -18,6 +18,28 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "replace-me-in-prod")
 DEBUG = os.getenv("DEBUG", "False") == "True"
 
+# Logging configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'WARNING',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'ERROR'),
+            'propagate': False,
+        },
+    },
+}
+
 # Hosts
 RENDER_EXTERNAL_HOSTNAME = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
 ALLOWED_HOSTS = [
@@ -30,7 +52,10 @@ if RENDER_EXTERNAL_HOSTNAME:
 
 # Apps
 INSTALLED_APPS = [
-    # Django core apps first
+    # CORS must come first
+    "corsheaders",
+
+    # Django core
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -50,16 +75,12 @@ INSTALLED_APPS = [
     # Utilities
     "django_extensions",
     "explorer",
-    
-    # Commented out due to CORS header duplication issues
-    # "corsheaders",
 ]
 
 # Middleware
 MIDDLEWARE = [
-    "proto_api.middleware.CorsFixMiddleware",            # Our custom CORS middleware handles all CORS
-    # "corsheaders.middleware.CorsMiddleware",           # Disabled to prevent duplicate headers
-    "proto_api.middleware.SqlExplorerMiddleware",
+    "corsheaders.middleware.CorsMiddleware",             # ← must be at top
+    "proto_api.middleware.SqlExplorerMiddleware",        # ← add our SQL Explorer middleware
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -71,16 +92,10 @@ MIDDLEWARE = [
 ]
 
 # CORS configuration
-# Now handled by our custom CorsFixMiddleware
-# CORS_ALLOW_ALL_ORIGINS = True
-
-# The specific origins are ignored when CORS_ALLOW_ALL_ORIGINS is True
-# Keeping them as a reference
-# CORS_ALLOWED_ORIGINS = [
-#     "https://proto-ux.netlify.app",
-#     "http://localhost:3000",
-# ]
-
+CORS_ALLOWED_ORIGINS = [
+    "https://proto-ux.netlify.app",
+    "http://localhost:3000",
+]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = [
     "DELETE",
@@ -135,25 +150,6 @@ DATABASES = {
         engine="django.db.backends.postgresql",  # Explicitly set the engine
     )
 }
-
-# Log database queries in DEBUG mode
-if DEBUG:
-    LOGGING = {
-        'version': 1,
-        'disable_existing_loggers': False,
-        'handlers': {
-            'console': {
-                'level': 'DEBUG',
-                'class': 'logging.StreamHandler',
-            }
-        },
-        'loggers': {
-            'django.db.backends': {
-                'handlers': ['console'],
-                'level': 'DEBUG',
-            },
-        }
-    }
 
 # Custom user
 AUTH_USER_MODEL = "Auth.User"
@@ -223,9 +219,10 @@ CACHES = {
 }
 
 # Celery Configuration
-CELERY_BROKER_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+CELERY_BROKER_URL = os.getenv('REDIS_URL', None)
+CELERY_RESULT_BACKEND = os.getenv('REDIS_URL', None)
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
