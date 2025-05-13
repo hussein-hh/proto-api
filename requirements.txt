@@ -8,13 +8,4 @@ django-cors-headers
 groq
 Pillow
 openai
-gunicorn>=20.1.0
-django_extensions
-requests
-bs4
-psycopg2-binary>=2.9.0
-dj-database-url>=1.0.0
-whitenoise
-django-sql-explorer
-cloudinary
-dj_database_url
+celery
