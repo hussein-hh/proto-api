@@ -159,6 +159,9 @@ EXPLORER_ASYNC_SCHEMA = False   # Disable async operations
 EXPLORER_PERMISSION_VIEW = lambda u: True   # Make it accessible to anyone for now
 EXPLORER_PERMISSION_CHANGE = lambda u: True   # Make it accessible to anyone for now
 
+# Allow all SQL commands (remove blacklist)
+EXPLORER_SQL_BLACKLIST = []  # Empty list means no restrictions
+
 # Simplified explorer settings
 EXPLORER_UNSAFE_QUERY_ALERT = True
 EXPLORER_UNSAFE_RENDERING = False
