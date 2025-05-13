@@ -99,7 +99,10 @@ WSGI_APPLICATION = "proto_api.wsgi.application"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "templates"],
+        "DIRS": [
+            BASE_DIR / "templates",
+            BASE_DIR / "explorer" / "templates",  # Add SQL Explorer templates
+        ],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -137,7 +140,7 @@ EXPLORER_SCHEMA_EXCLUDE_TABLE_PREFIXES = (
 )
 EXPLORER_SCHEMA_INCLUDE_TABLE_PREFIXES = ()
 EXPLORER_SCHEMA_INCLUDE_VIEWS = True
-EXPLORER_TOKEN = 'your-secret-token'  # Change this to a secure value
+EXPLORER_TOKEN = os.getenv('EXPLORER_TOKEN', 'your-secret-token')
 EXPLORER_PERMISSION_VIEW = lambda u: u.is_staff
 EXPLORER_PERMISSION_CHANGE = lambda u: u.is_superuser
 EXPLORER_ASYNC_SCHEMA = True
@@ -146,6 +149,9 @@ EXPLORER_DATA_EXPORTERS = [
     ('excel', 'explorer.exporters.ExcelExporter'),
     ('json', 'explorer.exporters.JSONExporter'),
 ]
+EXPLORER_TASKS_ENABLED = True
+EXPLORER_SCHEMA_CACHE_TIMEOUT = 60 * 60 * 24  # 24 hours
+EXPLORER_SCHEMA_CACHE_KEY = 'explorer_schema_cache'
 
 # DRF
 REST_FRAMEWORK = {
@@ -157,6 +163,10 @@ REST_FRAMEWORK = {
 # Static files
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
+    BASE_DIR / "explorer" / "static",  # Add SQL Explorer static files
+]
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # JWT
