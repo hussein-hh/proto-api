@@ -57,8 +57,10 @@ INSTALLED_APPS = [
 
 # Middleware
 MIDDLEWARE = [
-    "whitenoise.middleware.WhiteNoiseMiddleware",
     "proto_api.middleware.CorsFixMiddleware",            # Our custom CORS middleware handles all CORS
+    # "corsheaders.middleware.CorsMiddleware",           # Disabled to prevent duplicate headers
+    "proto_api.middleware.SqlExplorerMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -66,10 +68,19 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "proto_api.middleware.SqlExplorerMiddleware",
 ]
 
 # CORS configuration
+# Now handled by our custom CorsFixMiddleware
+# CORS_ALLOW_ALL_ORIGINS = True
+
+# The specific origins are ignored when CORS_ALLOW_ALL_ORIGINS is True
+# Keeping them as a reference
+# CORS_ALLOWED_ORIGINS = [
+#     "https://proto-ux.netlify.app",
+#     "http://localhost:3000",
+# ]
+
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = [
     "DELETE",
@@ -90,13 +101,6 @@ CORS_ALLOW_HEADERS = [
     "x-csrftoken",
     "x-requested-with",
 ]
-
-# Add CORS debugging
-if DEBUG:
-    LOGGING['loggers']['proto_api.middleware'] = {
-        'handlers': ['console'],
-        'level': 'DEBUG',
-    }
 
 # URL & WSGI
 ROOT_URLCONF = "proto_api.urls"

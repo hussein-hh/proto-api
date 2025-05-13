@@ -63,14 +63,10 @@ class CorsFixMiddleware:
     
     def __init__(self, get_response):
         self.get_response = get_response
-        self.allowed_origin = 'https://proto-ux.netlify.app'
         
     def __call__(self, request):
-        logger.debug(f"CorsFixMiddleware processing request: {request.method} {request.path}")
-        
         # Special handling for OPTIONS requests (CORS preflight)
         if request.method == 'OPTIONS':
-            logger.debug("Handling OPTIONS preflight request")
             return self.handle_preflight(request)
         
         # Process the request and get the response
@@ -89,32 +85,22 @@ class CorsFixMiddleware:
     
     def add_cors_headers(self, request, response):
         """Add CORS headers to a response"""
-        # Get the origin from the request
-        origin = request.META.get('HTTP_ORIGIN', '')
-        logger.debug(f"Request origin: {origin}")
+        origin = request.META.get('HTTP_ORIGIN')
         
         # Clear any existing CORS headers to prevent duplication
         cors_headers = [key for key in response if key.lower().startswith('access-control-')]
         for header in cors_headers:
             del response[header]
-            logger.debug(f"Removed existing header: {header}")
         
-        # Always set the allowed origin header
-        if origin == self.allowed_origin:
+        # Add the appropriate CORS headers
+        if origin:
             response['Access-Control-Allow-Origin'] = origin
         else:
-            response['Access-Control-Allow-Origin'] = self.allowed_origin
-        
-        # Add the other CORS headers
+            response['Access-Control-Allow-Origin'] = 'https://proto-ux.netlify.app'
+            
         response['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS, PUT, DELETE'
         response['Access-Control-Allow-Headers'] = 'Authorization, Content-Type, X-Requested-With, Origin, Accept'
         response['Access-Control-Allow-Credentials'] = 'true'
         response['Access-Control-Max-Age'] = '86400'  # 24 hours
-        
-        # Log the final headers for debugging
-        logger.debug("Final CORS headers:")
-        for header, value in response.items():
-            if header.lower().startswith('access-control-'):
-                logger.debug(f"{header}: {value}")
         
         return response 
