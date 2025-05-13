@@ -6,6 +6,10 @@ pip install -r requirements.txt
 python manage.py collectstatic --noinput
 python manage.py migrate --noinput
 
+# Fix SQL Explorer QueryLog table
+echo "Running SQL Explorer QueryLog fix"
+python manage.py fix_explorer_querylog
+
 # Auto-create superuser if missing (for Auth.User model)
 echo "
 from Domains.Auth.models import User

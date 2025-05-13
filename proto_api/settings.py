@@ -55,6 +55,7 @@ INSTALLED_APPS = [
 # Middleware
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",             # ← must be at top
+    "proto_api.middleware.SqlExplorerMiddleware",        # ← add our SQL Explorer middleware
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
