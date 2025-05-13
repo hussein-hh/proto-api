@@ -70,10 +70,16 @@ MIDDLEWARE = [
 ]
 
 # CORS configuration
-CORS_ALLOWED_ORIGINS = [
-    "https://proto-ux.netlify.app",
-    "http://localhost:3000",
-]
+# Allow all origins
+CORS_ALLOW_ALL_ORIGINS = True
+
+# The specific origins are ignored when CORS_ALLOW_ALL_ORIGINS is True
+# Keeping them as a reference
+# CORS_ALLOWED_ORIGINS = [
+#     "https://proto-ux.netlify.app",
+#     "http://localhost:3000",
+# ]
+
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = [
     "DELETE",
