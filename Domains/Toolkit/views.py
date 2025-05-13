@@ -36,17 +36,27 @@ def add_cors_headers(view_func):
         # Get the response from the view
         response = view_func(*args, **kwargs)
         
-        # Add CORS headers to the response
+        # Add CORS headers to the response only if they don't already exist
         if args and hasattr(args[0], 'META'):
             request = args[0]
-            origin = request.META.get('HTTP_ORIGIN')
-            if origin:
-                response["Access-Control-Allow-Origin"] = origin
-            else:
-                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
-            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
-            response["Access-Control-Allow-Credentials"] = "true"
+            
+            # Only add the header if it doesn't already exist
+            if 'Access-Control-Allow-Origin' not in response:
+                origin = request.META.get('HTTP_ORIGIN')
+                if origin:
+                    response["Access-Control-Allow-Origin"] = origin
+                else:
+                    response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+                    
+            if 'Access-Control-Allow-Methods' not in response:
+                response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+                
+            if 'Access-Control-Allow-Headers' not in response:
+                response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+                
+            if 'Access-Control-Allow-Credentials' not in response:
+                response["Access-Control-Allow-Credentials"] = "true"
+                
         return response
     return wrapped_view
 

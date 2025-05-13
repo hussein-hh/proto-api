@@ -115,18 +115,26 @@ class CorsFixMiddleware:
         """Helper method to add CORS headers to a response"""
         origin = request.META.get('HTTP_ORIGIN')
         
-        # If an origin was specified, add it to the allow origin header
-        if origin:
-            logger.info(f"CorsFixMiddleware: Adding CORS headers for origin {origin}")
-            response["Access-Control-Allow-Origin"] = origin
-        else:
-            # Fallback to the main frontend domain if no origin was specified
-            response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
-            logger.info("CorsFixMiddleware: Adding CORS headers with fallback origin")
+        # Only add headers if they don't already exist
+        if 'Access-Control-Allow-Origin' not in response:
+            # If an origin was specified, add it to the allow origin header
+            if origin:
+                logger.info(f"CorsFixMiddleware: Adding CORS headers for origin {origin}")
+                response["Access-Control-Allow-Origin"] = origin
+            else:
+                # Fallback to the main frontend domain if no origin was specified
+                response["Access-Control-Allow-Origin"] = "https://proto-ux.netlify.app"
+                logger.info("CorsFixMiddleware: Adding CORS headers with fallback origin")
+        
+        if 'Access-Control-Allow-Methods' not in response:
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
             
-        response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-        response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
-        response["Access-Control-Allow-Credentials"] = "true"
+        if 'Access-Control-Allow-Headers' not in response:
+            response["Access-Control-Allow-Headers"] = "authorization, content-type, origin, x-csrftoken"
+            
+        if 'Access-Control-Allow-Credentials' not in response:
+            response["Access-Control-Allow-Credentials"] = "true"
+            
         return response
     
     def build_cors_preflight_response(self, request):
