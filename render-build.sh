@@ -6,16 +6,19 @@ pip install -r requirements.txt
 python manage.py collectstatic --noinput
 python manage.py migrate --noinput
 
-# Auto-create superuser if missing (email-based User model)
+# Auto-create superuser if missing (for Auth.User model)
 echo "
-from django.contrib.auth import get_user_model
-User = get_user_model()
-# determine the USERNAME_FIELD (probably 'email')
-uname_field = User.USERNAME_FIELD
+from Domains.Auth.models import User
 admin_email = 'admin@example.com'
-admin_pass = 'AdminPass123'
+admin_password = 'AdminPass123'
 
-# only create if no user with that email exists
-if not User.objects.filter(**{uname_field: admin_email}).exists():
-    User.objects.create_superuser(admin_email, admin_pass)
+# Only create if no superuser exists
+if not User.objects.filter(email=admin_email).exists():
+    try:
+        user = User.objects.create_superuser(email=admin_email, password=admin_password)
+        print(f'Superuser {admin_email} created successfully!')
+    except Exception as e:
+        print(f'Failed to create superuser: {str(e)}')
+else:
+    print(f'Superuser {admin_email} already exists.')
 " | python manage.py shell
