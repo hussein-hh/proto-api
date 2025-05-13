@@ -79,10 +79,10 @@ INSTALLED_APPS = [
 
 # Middleware
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",             # ← must be at top
-    "proto_api.middleware.SqlExplorerMiddleware",        # ← add our SQL Explorer middleware
-    "whitenoise.middleware.WhiteNoiseMiddleware",
-    "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",             # ← must be at the very top
+    "django.middleware.security.SecurityMiddleware",     # Security middleware comes next
+    "whitenoise.middleware.WhiteNoiseMiddleware",        # Then whitenoise
+    "proto_api.middleware.SqlExplorerMiddleware",        # Custom middleware after Django's security
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -92,6 +92,7 @@ MIDDLEWARE = [
 ]
 
 # CORS configuration
+CORS_ALLOW_ALL_ORIGINS = False  # Set to True only if you want to allow any origin (not recommended)
 CORS_ALLOWED_ORIGINS = [
     "https://proto-ux.netlify.app",
     "http://localhost:3000",
@@ -116,6 +117,15 @@ CORS_ALLOW_HEADERS = [
     "x-csrftoken",
     "x-requested-with",
 ]
+
+# Ensure CORS headers are added to responses
+CORS_EXPOSE_HEADERS = [
+    "access-control-allow-origin",
+    "access-control-allow-credentials",
+]
+
+# Add CORS preflight cache for better performance
+CORS_PREFLIGHT_MAX_AGE = 86400  # 24 hours
 
 # URL & WSGI
 ROOT_URLCONF = "proto_api.urls"

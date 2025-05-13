@@ -1,8 +1,9 @@
 from django.contrib import admin
 from django.urls import path, include
 from django.views.generic import RedirectView
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 import traceback
+from django.views.decorators.csrf import csrf_exempt
 
 # Simple health check view
 def health_check(request):
@@ -34,6 +35,15 @@ def explorer_debug(request):
             status=500
         )
 
+# Simple diagnostic view to test CORS
+@csrf_exempt
+def cors_debug(request):
+    return JsonResponse({
+        'message': 'CORS check successful',
+        'request_headers': dict(request.headers),
+        'cors_enabled': True
+    })
+
 urlpatterns = [
     # Root URL redirects to admin
     path('', RedirectView.as_view(url='/admin/', permanent=False)),
@@ -43,6 +53,9 @@ urlpatterns = [
     
     # Explorer debug endpoint
     path('explorer-debug/', explorer_debug, name='explorer_debug'),
+    
+    # Add diagnostic endpoint
+    path('api/cors-debug/', cors_debug, name='cors-debug'),
     
     # Admin and other endpoints
     path('admin/', admin.site.urls),

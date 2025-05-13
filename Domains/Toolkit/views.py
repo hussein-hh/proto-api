@@ -80,7 +80,20 @@ def get_web_performance(url):
         raise ValueError(f"Invalid response from PageSpeed API: {str(e)}")
 
 class WebMetricsAPIView(APIView):
+    def options(self, request, *args, **kwargs):
+        # This method is needed to handle preflight CORS requests
+        return Response(
+            status=status.HTTP_200_OK,
+            headers={
+                'Access-Control-Allow-Origin': 'https://proto-ux.netlify.app',
+                'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+                'Access-Control-Allow-Credentials': 'true',
+            }
+        )
+        
     def get(self, request, format=None):
+        # Ensure we're including CORS headers in our response
         auth_header = request.headers.get('Authorization')
         if not auth_header:
             return Response({'error': 'Authorization header is required.'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -155,6 +168,17 @@ class WebMetricsAPIView(APIView):
             return Response({"error": f"Failed to get web metrics: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class RoleModelWebMetricsAPIView(APIView):
+    def options(self, request, *args, **kwargs):
+        # This method is needed to handle preflight CORS requests
+        return Response(
+            status=status.HTTP_200_OK,
+            headers={
+                'Access-Control-Allow-Origin': 'https://proto-ux.netlify.app',
+                'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+                'Access-Control-Allow-Credentials': 'true',
+            }
+        )
 
     def get(self, request, format=None):
         page_id = request.query_params.get('page_id')
