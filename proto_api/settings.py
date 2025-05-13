@@ -120,38 +120,40 @@ DATABASES = {
     "default": dj_database_url.config(
         default=os.getenv("DATABASE_URL"),
         conn_max_age=600,
-        ssl_require=True  # Enable SSL for database connections
+        ssl_require=True,  # Enable SSL for database connections
+        engine="django.db.backends.postgresql",  # Explicitly set the engine
     )
 }
+
+# Log database queries in DEBUG mode
+if DEBUG:
+    LOGGING = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'handlers': {
+            'console': {
+                'level': 'DEBUG',
+                'class': 'logging.StreamHandler',
+            }
+        },
+        'loggers': {
+            'django.db.backends': {
+                'handlers': ['console'],
+                'level': 'DEBUG',
+            },
+        }
+    }
 
 # Custom user
 AUTH_USER_MODEL = "Auth.User"
 
-# Django Explorer (if you actually use it)
+# SQL Explorer configuration - minimal configuration
 EXPLORER_CONNECTIONS = {"default": "default"}
-EXPLORER_ALLOW_MUTATIONS = True
-EXPLORER_SQL_BLACKLIST = []
-EXPLORER_SCHEMA_EXCLUDE_TABLE_PREFIXES = (
-    'auth_',
-    'contenttypes_',
-    'sessions_',
-    'admin_',
-    'django_',
-)
-EXPLORER_SCHEMA_INCLUDE_TABLE_PREFIXES = ()
-EXPLORER_SCHEMA_INCLUDE_VIEWS = True
-EXPLORER_TOKEN = os.getenv('EXPLORER_TOKEN', 'your-secret-token')
-EXPLORER_PERMISSION_VIEW = lambda u: u.is_staff
-EXPLORER_PERMISSION_CHANGE = lambda u: u.is_superuser
-EXPLORER_ASYNC_SCHEMA = False  # Disable async to avoid Celery dependency
-EXPLORER_DATA_EXPORTERS = [
-    ('csv', 'explorer.exporters.CSVExporter'),
-    ('excel', 'explorer.exporters.ExcelExporter'),
-    ('json', 'explorer.exporters.JSONExporter'),
-]
-EXPLORER_TASKS_ENABLED = False  # Disable tasks to avoid Celery dependency
-EXPLORER_SCHEMA_CACHE_TIMEOUT = 60 * 60 * 24  # 24 hours
-EXPLORER_SCHEMA_CACHE_KEY = 'explorer_schema_cache'
+EXPLORER_DEFAULT_CONNECTION = "default"
+EXPLORER_ENABLE_TASKS = False   # Disable Celery dependency
+EXPLORER_ASYNC_SCHEMA = False   # Disable async operations
+EXPLORER_PERMISSION_VIEW = lambda u: True   # Make it accessible to anyone for now
+EXPLORER_PERMISSION_CHANGE = lambda u: True   # Make it accessible to anyone for now
 
 # Simplified explorer settings
 EXPLORER_UNSAFE_QUERY_ALERT = True
@@ -203,20 +205,6 @@ CACHES = {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         "LOCATION": "unique-snowflake",
     }
-}
-
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "brief": {"format": "%(levelname)s %(name)s | %(message)s"},
-    },
-    "handlers": {
-        "console": {"class": "logging.StreamHandler", "formatter": "brief"},
-    },
-    "loggers": {
-        "ux_eval": {"handlers": ["console"], "level": "INFO", "propagate": False},
-    },
 }
 
 # Celery Configuration
