@@ -153,7 +153,10 @@ class WebMetricsAPIView(APIView):
 
             # Save metrics to file
             os.makedirs(metrics_dir, exist_ok=True)
-            metrics_data = {f"{business.name} metrics": metrics_result}
+            metrics_data = {
+                "businessName": business.name,
+                "businessMetrics": metrics_result
+            }
             with open(metrics_path, 'w', encoding='utf-8') as f:
                 json.dump(metrics_data, f, ensure_ascii=False, indent=2)
             

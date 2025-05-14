@@ -96,6 +96,8 @@ CORS_ALLOW_ALL_ORIGINS = True  # Since you want to allow access from netlify, th
 CORS_ALLOWED_ORIGINS = [
     "https://proto-ux.netlify.app",
     "http://localhost:3000",
+    "https://proto-api-kg9r.onrender.com/toolkit/web-metrics",
+    "https://proto-api-kg9r.onrender.com/ask-ai/evaluate-ui",
 ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = [
