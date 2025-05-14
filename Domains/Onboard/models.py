@@ -63,11 +63,10 @@ class Page(models.Model):
     business = models.ForeignKey("Business", null=True, blank=True, on_delete=models.SET_NULL)
     user = models.ForeignKey(get_user_model(), null=True, blank=True, on_delete=models.SET_NULL)
     screenshot = models.TextField(null=True, blank=True)
-    html = models.TextField(null=True, blank=True)
-    css = models.TextField(null=True, blank=True)
-    ui_report = models.TextField(null=True, blank=True)
-    wpm = models.TextField(null=True, blank=True)
-
+    html = models.FilePathField(path="Records", allow_files=True, match=".*\.json$", recursive=True, null=True)
+    css = models.FilePathField(path="Records", allow_files=True, match=".*\.json$", recursive=True, null=True)
+    ui_report = models.FilePathField(path="Records", allow_files=True, match=".*\.json$", recursive=True, null=True)
+    wpm = models.FilePathField(path="Records", allow_files=True, match=".*\.json$", recursive=True, null=True)
 
     def __str__(self):
-        return f"{self.page_type} - {self.upload.name} by {self.user.username}"
+        return f"{self.page_type} for {self.business.name if self.business else 'Unknown Business'}"

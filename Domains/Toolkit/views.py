@@ -296,6 +296,21 @@ class PageHTMLAPIView(APIView):
             return Response({"error": "Page does not have a URL set."},
                             status=status.HTTP_400_BAD_REQUEST)
 
+        # Check if HTML data already exists
+        html_dir = os.path.join('Records', 'html_data', str(page.business.id))
+        html_path = os.path.join(html_dir, f'{page_id}.json')
+        
+        if os.path.exists(html_path):
+            try:
+                with open(html_path, 'r', encoding='utf-8') as f:
+                    stored_html_data = json.load(f)
+                    # Store the relative path in the html field
+                    page.html = os.path.relpath(html_path)
+                    page.save()
+                return Response(stored_html_data, status=status.HTTP_200_OK)
+            except json.JSONDecodeError:
+                pass
+
         try:
             resp = requests.get(
                 page.url,
@@ -356,9 +371,22 @@ class PageHTMLAPIView(APIView):
                 "num_tags": num_tags,
                 "dom_outline": dom_outline,
                 "repeated_signatures": repeated,
+                "raw_html": soup.prettify()  # Store the prettified HTML
             }
 
-            return Response(html_extract, status=status.HTTP_200_OK)
+            # Save HTML data to file
+            os.makedirs(html_dir, exist_ok=True)
+            with open(html_path, 'w', encoding='utf-8') as f:
+                json.dump(html_extract, f, ensure_ascii=False, indent=2)
+            
+            # Store the relative path in the html field
+            page.html = os.path.relpath(html_path)
+            page.save()
+
+            # Remove raw_html from response to keep it lightweight
+            response_data = html_extract.copy()
+            del response_data['raw_html']
+            return Response(response_data, status=status.HTTP_200_OK)
 
         except Exception as exc:
             return Response(
