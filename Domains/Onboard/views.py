@@ -11,6 +11,7 @@ import requests
 from rest_framework.parsers import MultiPartParser
 from django.core.validators import URLValidator
 from django.core.exceptions import ValidationError
+from bs4 import BeautifulSoup
 
 User = get_user_model()
 
@@ -184,8 +185,25 @@ class PageOnboardingAPIView(APIView):
             if not html_content:
                 return Response({"error": "No HTML content found"}, status=status.HTTP_404_NOT_FOUND)
 
-            # Save HTML content
-            page.html = html_content
+            # Save HTML content to file
+            html_dir = os.path.join(settings.BASE_DIR, 'Records', 'html_data', str(business.id))
+            os.makedirs(html_dir, exist_ok=True)
+            html_path = os.path.join(html_dir, f'{page.id}.json')
+            
+            # Create an HTML structure similar to what PageHTMLAPIView creates
+            soup = BeautifulSoup(html_content, "html.parser")
+            
+            html_extract = {
+                "url": page.url,
+                "title": soup.title.string.strip() if soup.title and soup.title.string else None,
+                "raw_html": html_content,
+            }
+            
+            with open(html_path, 'w', encoding='utf-8') as f:
+                json.dump(html_extract, f, ensure_ascii=False, indent=2)
+            
+            # Store the relative path
+            page.html = os.path.relpath(html_path, settings.BASE_DIR)
             page.save()
 
             css_resp = requests.get(f"http://proto-api-kg9r.onrender.com/toolkit/business-css/?page_id={page.id}")
