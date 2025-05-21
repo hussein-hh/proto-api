@@ -159,6 +159,22 @@ class EvaluateUIAPIView(APIView):
             return Response({"error": "Page not found"},
                             status=status.HTTP_404_NOT_FOUND)
 
+        # Check if cached UI evaluation exists
+        if page.business:
+            eval_folder = make_dir('UI-EVALUATIONS', str(page.business.id))
+            eval_path = os.path.join(eval_folder, f'ui_evaluation_{pid}.json')
+            
+            if os.path.exists(eval_path):
+                try:
+                    with open(eval_path, "r", encoding="utf-8") as fh:
+                        evaluation = json.load(fh)
+                    log.info(f"page {pid} | evaluation loaded from cache")
+                    return Response({"evaluation": evaluation},
+                                    status=status.HTTP_200_OK)
+                except Exception as e:
+                    log.exception(f"page {pid} | cached evaluation processing error")
+                    # Continue to normal flow if there's an error processing cached evaluation
+
         # First check if report exists in Records/UI-REPORTS/{business_id}
         if page.business:
             report_path = os.path.join('Records', 'UI-REPORTS', str(page.business.id), f'ui_report_{pid}.json')
@@ -184,6 +200,14 @@ class EvaluateUIAPIView(APIView):
                         business_type,
                         page_type,
                     )
+                    
+                    # Cache the evaluation results
+                    try:
+                        with open(eval_path, "w", encoding="utf-8") as f:
+                            json.dump(evaluation, f, ensure_ascii=False, indent=2)
+                        log.info(f"page {pid} | evaluation cached successfully")
+                    except Exception as e:
+                        log.exception(f"page {pid} | failed to cache evaluation")
                     
                     log.info(f"page {pid} | evaluation OK (from cached report)")
                     return Response({"evaluation": evaluation},
@@ -236,6 +260,18 @@ class EvaluateUIAPIView(APIView):
                 business_type,
                 page_type,
             )
+            
+            # Cache the evaluation results
+            if page.business:
+                eval_folder = make_dir('UI-EVALUATIONS', str(page.business.id))
+                eval_path = os.path.join(eval_folder, f'ui_evaluation_{pid}.json')
+                try:
+                    with open(eval_path, "w", encoding="utf-8") as f:
+                        json.dump(evaluation, f, ensure_ascii=False, indent=2)
+                    log.info(f"page {pid} | evaluation cached successfully")
+                except Exception as e:
+                    log.exception(f"page {pid} | failed to cache evaluation")
+                    
         except ValueError as ve:
             log.warning(f"page {pid} | validation error | {ve}")
             return Response({"error": "Evaluation category mismatch",
@@ -356,6 +392,22 @@ class UBAProblemSolutionsAPIView(APIView):
         if not up.uba_report or not os.path.exists(up.uba_report):
             return Response({"error": "No UBA report found"}, status=404)
 
+        # Check if cached solutions exist
+        page = up.references_page
+        if page and page.business:
+            solutions_folder = make_dir('UBA-SOLUTIONS', str(page.business.id))
+            solutions_path = os.path.join(solutions_folder, f'uba_solutions_{pid}.json')
+            
+            if os.path.exists(solutions_path):
+                try:
+                    with open(solutions_path, 'r', encoding='utf-8') as f:
+                        cached_results = json.load(f)
+                    log.info(f"page {pid} | UBA solutions loaded from cache")
+                    return Response({"results": cached_results}, status=200)
+                except Exception as e:
+                    log.exception(f"page {pid} | cached UBA solutions processing error")
+                    # Continue to normal flow if error processing cached solutions
+
         with open(up.uba_report, encoding="utf-8") as f:
             report_text = json.load(f).get("report", "")
 
@@ -374,6 +426,22 @@ class UBAProblemSolutionsAPIView(APIView):
                 "problem": clause.strip(),
                 "solutions": resources
             })
+
+        # Cache the solutions
+        if page and page.business:
+            solutions_folder = make_dir('UBA-SOLUTIONS', str(page.business.id))
+            solutions_path = os.path.join(solutions_folder, f'uba_solutions_{pid}.json')
+            try:
+                with open(solutions_path, 'w', encoding='utf-8') as f:
+                    json.dump(results, f, ensure_ascii=False, indent=2)
+                log.info(f"page {pid} | UBA solutions cached successfully")
+                
+                # Store the path in the Upload model if it has a field for it
+                if hasattr(up, 'uba_solutions'):
+                    up.uba_solutions = solutions_path
+                    up.save()
+            except Exception as e:
+                log.exception(f"page {pid} | failed to cache UBA solutions")
 
         return Response({"results": results}, status=200)
 

@@ -219,7 +219,7 @@ class PageOnboardingAPIView(APIView):
             try:
                 ss_api_resp = requests.get(
                     f"http://proto-api-kg9r.onrender.com/toolkit/take-screenshot/?page_id={page.id}",
-                    timeout=60
+                    timeout=120
                 )
                 if ss_api_resp.ok:
                     data = ss_api_resp.json()
