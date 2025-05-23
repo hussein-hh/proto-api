@@ -516,7 +516,7 @@ class TakeScreenshotAPIView(APIView):
 
         api_url = "https://shot.screenshotapi.net/screenshot"
         params = {
-            "token": "X80STSY-SY64H77-MZ020D7-TAM3E63",
+            "token": "",
             "url": page.url,
             "file_type": "png",
             "full_page": "true",
