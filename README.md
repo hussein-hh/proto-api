@@ -129,7 +129,7 @@ The combined output is used to build a **UI Report**, which is then evaluated by
 
 ### UBA Subdomain
 
-![UBA Architecture](pictures/uba-arch)
+![UBA Architecture](pictures/uba-arch.png)
 
 This subdomain evaluates user-provided UBA (User Behavior Analytics) data.
 
