@@ -5,20 +5,15 @@ from django.contrib.auth import get_user_model
 class Upload(models.Model):
     class Meta:
         db_table = 'file_uploads'
-    FILE_TYPES = (
-        ('txt', 'Text File'),
-        ('csv', 'CSV'),
-        ('json', 'JSON'),
-        ('jpg', 'JPG'),
-    )
 
     name = models.CharField(max_length=255)
-    type = models.CharField(max_length=10, choices=FILE_TYPES)
+    type = models.CharField(max_length=10)
     path = models.CharField(max_length=255)
     references_page = models.ForeignKey(Page, on_delete=models.CASCADE)
     uploaded_at = models.DateTimeField(auto_now_add=True)
     uploaded_by = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
     uba_report = models.CharField(max_length=255, null=True)
-    
+    web_metrics_report = models.TextField(blank=True, null=True)
+
     def __str__(self):
-        return f"{self.name} ({self.get_type_display()}) - Page: {self.references_page}"
+        return f"{self.name} ({self.type}) - Page: {self.references_page}"

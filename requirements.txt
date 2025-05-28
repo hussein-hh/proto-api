@@ -9,3 +9,13 @@ groq
 Pillow
 openai
 celery
+django-sql-explorer==3.2.0
+cloudinary
+dj_database_url
+redis>=4.5.0
+django-extensions>=3.2.0
+psycopg2-binary>=2.9.9
+bs4
+gunicorn>=21.2.0
+whitenoise>=6.6.0
+requests

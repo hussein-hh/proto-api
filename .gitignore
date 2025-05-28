@@ -31,3 +31,7 @@ Records/*/*
 
 # Local helper scripts (macos)
 *.sh
+
+# screenshots
+
+/screenshots

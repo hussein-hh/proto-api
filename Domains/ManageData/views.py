@@ -18,12 +18,12 @@ User = get_user_model()
 
 
 def slugify(text):
-    """Simple function to convert text into a safe format for folder names."""
+    #Simple function to convert text into a safe format for folder names
     return re.sub(r'[\W_]+', '_', text).strip('_').lower()
 
 
 def error_response(message, status_code):
-    """Helper function to create response objects for better readability."""
+    #Helper function to create response objects for better readability
     return Response(message, status=status_code)
 
 
@@ -55,14 +55,13 @@ class FileUploadView(APIView):
         except Business.DoesNotExist:
             return Response({'error': 'Business not found for user'}, status=status.HTTP_404_NOT_FOUND)
 
-        slug = slugify(business.category)
-        directory = Path('uploads') / slug / str(business.id) / str(user.id)
+        directory = Path('uploads') / str(page_id)
         directory.mkdir(parents=True, exist_ok=True)
 
         ext = Path(uploaded_file.name).suffix.lower() or f".{uploaded_file.content_type.split('/')[-1]}"
         ts = datetime.now().strftime('%Y%m%d%H%M%S')
         base = Path(raw_name).stem
-        filename = f"{ts}_{business.name}_{business.id}_user_{user.id}_{base}{ext}"
+        filename = f"{ts}_{base}{ext}"
 
         path = directory / filename
         with path.open('wb+') as f:
@@ -139,17 +138,21 @@ class FileUpdateView(APIView):
         except Business.DoesNotExist:
             return error_response({'error': 'Business not found for user'}, status.HTTP_404_NOT_FOUND)
 
-        business_type_slug = slugify(business.category)
-        business_name = business.name
-        business_id = business.id
-        user_id_str = str(user.id)
+        if new_page_id:
+            try:
+                new_page = Page.objects.get(id=new_page_id)
+                upload.references_page = new_page
+                directory = Path("uploads") / str(new_page_id)
+            except Page.DoesNotExist:
+                return error_response({'error': 'Page not found'}, status.HTTP_400_BAD_REQUEST)
+        else:
+            directory = Path("uploads") / str(upload.references_page.id)
 
-        user_directory = Path("uploads") / business_type_slug / str(business_id) / user_id_str
-        user_directory.mkdir(parents=True, exist_ok=True)
+        directory.mkdir(parents=True, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        new_filename = f"{timestamp}_{business_name}_{business_id}_{user.username}_{user_id_str}_{new_name}"
-        new_file_path = user_directory / new_filename
+        new_filename = f"{timestamp}_{new_name}"
+        new_file_path = directory / new_filename
 
         with new_file_path.open('wb+') as destination:
             for chunk in new_file.chunks():

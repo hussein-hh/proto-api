@@ -22,9 +22,8 @@ from django.contrib.auth import get_user_model
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
-
-from Domains.Onboard.models import Business, Page
+from pathlib import Path
+from Domains.Onboard.models import Business, Page, RoleModelPage
 
 User = get_user_model()
 
@@ -49,24 +48,52 @@ def get_web_performance(url):
         return cached_data
 
     api_key = settings.PAGESPEED_API_KEY
+    if not api_key:
+        raise ValueError("PageSpeed API key is not configured")
+
     api_url = f"https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={url}&strategy=mobile&key={api_key}"
-    response = requests.get(api_url)
-    data = response.json()
+    try:
+        response = requests.get(api_url, timeout=300)
+        response.raise_for_status()
+        data = response.json()
+        
+        if "error" in data:
+            raise ValueError(f"PageSpeed API error: {data['error']['message']}")
 
-    metrics = {
-        "First Contentful Paint": data["lighthouseResult"]["audits"]["first-contentful-paint"]["displayValue"],
-        "Speed Index": data["lighthouseResult"]["audits"]["speed-index"]["displayValue"],
-        "Largest Contentful Paint (LCP)": data["lighthouseResult"]["audits"]["largest-contentful-paint"]["displayValue"],
-        "Time to Interactive": data["lighthouseResult"]["audits"]["interactive"]["displayValue"],
-        "Total Blocking Time (TBT)": data["lighthouseResult"]["audits"]["total-blocking-time"]["displayValue"],
-        "Cumulative Layout Shift (CLS)": data["lighthouseResult"]["audits"]["cumulative-layout-shift"]["displayValue"]
-    }
+        if "lighthouseResult" not in data or "audits" not in data["lighthouseResult"]:
+            raise ValueError("Invalid response format from PageSpeed API")
 
-    cache.set(cache_key, metrics, timeout=60 * 60)
-    return metrics
+        metrics = {
+            "First Contentful Paint": data["lighthouseResult"]["audits"]["first-contentful-paint"]["displayValue"],
+            "Speed Index": data["lighthouseResult"]["audits"]["speed-index"]["displayValue"],
+            "Largest Contentful Paint (LCP)": data["lighthouseResult"]["audits"]["largest-contentful-paint"]["displayValue"],
+            "Time to Interactive": data["lighthouseResult"]["audits"]["interactive"]["displayValue"],
+            "Total Blocking Time (TBT)": data["lighthouseResult"]["audits"]["total-blocking-time"]["displayValue"],
+            "Cumulative Layout Shift (CLS)": data["lighthouseResult"]["audits"]["cumulative-layout-shift"]["displayValue"]
+        }
+
+        cache.set(cache_key, metrics, timeout=60 * 60)
+        return metrics
+    except requests.exceptions.RequestException as e:
+        raise ValueError(f"Failed to fetch metrics from PageSpeed API: {str(e)}")
+    except (KeyError, json.JSONDecodeError) as e:
+        raise ValueError(f"Invalid response from PageSpeed API: {str(e)}")
 
 class WebMetricsAPIView(APIView):
+    def options(self, request, *args, **kwargs):
+        # This method is needed to handle preflight CORS requests
+        return Response(
+            status=status.HTTP_200_OK,
+            headers={
+                'Access-Control-Allow-Origin': 'https://proto-ux.netlify.app',
+                'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+                'Access-Control-Allow-Credentials': 'true',
+            }
+        )
+        
     def get(self, request, format=None):
+        # Ensure we're including CORS headers in our response
         auth_header = request.headers.get('Authorization')
         if not auth_header:
             return Response({'error': 'Authorization header is required.'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -103,13 +130,58 @@ class WebMetricsAPIView(APIView):
         if not target_url:
             return Response({"error": "Page URL is empty or missing."}, status=status.HTTP_400_BAD_REQUEST)
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future_metrics = executor.submit(get_web_performance, target_url)
-            metrics_result = future_metrics.result()
+        # Check if metrics already exist
+        metrics_dir = os.path.join('Records', 'web_metrics', 'business')
+        metrics_path = os.path.join(metrics_dir, f'{page_id}.json')
+        
+        if os.path.exists(metrics_path):
+            try:
+                with open(metrics_path, 'r', encoding='utf-8') as f:
+                    stored_metrics = json.load(f)
+                    # Store the relative path in the wpm field
+                    page.wpm = os.path.relpath(metrics_path)
+                    page.save()
+                return Response(stored_metrics, status=status.HTTP_200_OK)
+            except json.JSONDecodeError:
+                pass
 
-        return Response({f"{business.name} metrics": metrics_result}, status=status.HTTP_200_OK)
+        try:
+            # If no stored metrics or corrupted, fetch new ones
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future_metrics = executor.submit(get_web_performance, target_url)
+                metrics_result = future_metrics.result()
+
+            # Save metrics to file
+            os.makedirs(metrics_dir, exist_ok=True)
+            metrics_data = {
+                "businessName": business.name,
+                "businessMetrics": metrics_result
+            }
+            with open(metrics_path, 'w', encoding='utf-8') as f:
+                json.dump(metrics_data, f, ensure_ascii=False, indent=2)
+            
+            # Store the relative path in the wpm field
+            page.wpm = os.path.relpath(metrics_path)
+            page.save()
+
+            return Response(metrics_data, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+        except Exception as e:
+            return Response({"error": f"Failed to get web metrics: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class RoleModelWebMetricsAPIView(APIView):
+    def options(self, request, *args, **kwargs):
+        # This method is needed to handle preflight CORS requests
+        return Response(
+            status=status.HTTP_200_OK,
+            headers={
+                'Access-Control-Allow-Origin': 'https://proto-ux.netlify.app',
+                'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+                'Access-Control-Allow-Credentials': 'true',
+            }
+        )
 
     def get(self, request, format=None):
         page_id = request.query_params.get('page_id')
@@ -123,39 +195,60 @@ class RoleModelWebMetricsAPIView(APIView):
             return Response({"error": "Page not found for the given page_id"},
                             status=status.HTTP_404_NOT_FOUND)
 
-        if not page.business:
+        if not getattr(page, 'business', None):
             return Response({"error": "Page is not associated with any business."},
                             status=status.HTTP_400_BAD_REQUEST)
-
         business = page.business
 
-        if not business.role_model:
+        role_model = getattr(business, 'role_model', None)
+        if not role_model:
             return Response({"error": "Business does not have an associated role model."},
                             status=status.HTTP_404_NOT_FOUND)
 
-        role_model = business.role_model
         page_type = page.page_type
 
-        if page_type == "Landing Page":
-            role_model_url = role_model.landing_page
-        elif page_type == "Search Results Page":
-            role_model_url = role_model.results_page
-        elif page_type == "Product Page":
-            role_model_url = role_model.product_page
-        else:
-            return Response({"error": "Unknown page type."},
-                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            rm_page = RoleModelPage.objects.get(role_model=role_model, page_type=page_type)
+        except RoleModelPage.DoesNotExist:
+            return Response({"error": f"No URL configured for '{page_type}' in role model pages."},
+                            status=status.HTTP_404_NOT_FOUND)
 
+        role_model_url = getattr(rm_page, 'url', None)
         if not role_model_url:
-            return Response({"error": f"No URL configured for {page_type} in the role model."},
+            return Response({"error": f"No URL set on RoleModelPage for '{page_type}'."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future_metrics = executor.submit(get_web_performance, role_model_url)
-            metrics_result = future_metrics.result()
+        # Check if metrics already exist
+        metrics_dir = os.path.join('Records', 'web_metrics', 'role_model')
+        metrics_path = os.path.join(metrics_dir, f'{role_model.id}.json')
+        
+        if os.path.exists(metrics_path):
+            try:
+                with open(metrics_path, 'r', encoding='utf-8') as f:
+                    stored_metrics = json.load(f)
+                    # Store the relative path in the wpm field
+                    rm_page.wpm = os.path.relpath(metrics_path)
+                    rm_page.save()
+                return Response(stored_metrics, status=status.HTTP_200_OK)
+            except json.JSONDecodeError:
+                pass
+
+        # If no stored metrics or corrupted, fetch new ones
+        metrics_result = get_web_performance(role_model_url)
+
+        # Save metrics to file
+        os.makedirs(metrics_dir, exist_ok=True)
+        metrics_data = {f"{role_model.name} {page_type} metrics": metrics_result}
+        with open(metrics_path, 'w', encoding='utf-8') as f:
+            json.dump(metrics_data, f, ensure_ascii=False, indent=2)
+        
+        # Store the relative path in the wpm field
+        rm_page.wpm = os.path.relpath(metrics_path)
+        rm_page.save()
 
         response_key = f"{role_model.name} {page_type} metrics"
         return Response({response_key: metrics_result}, status=status.HTTP_200_OK)
+
 
 class PageHTMLAPIView(APIView):
     def _build_dom_outline(self, soup, text_limit=50):
@@ -205,6 +298,21 @@ class PageHTMLAPIView(APIView):
         if not page.url:
             return Response({"error": "Page does not have a URL set."},
                             status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if HTML data already exists
+        html_dir = os.path.join('Records', 'html_data', str(page.business.id))
+        html_path = os.path.join(html_dir, f'{page_id}.json')
+        
+        if os.path.exists(html_path):
+            try:
+                with open(html_path, 'r', encoding='utf-8') as f:
+                    stored_html_data = json.load(f)
+                    # Store the relative path in the html field
+                    page.html = os.path.relpath(html_path)
+                    page.save()
+                return Response(stored_html_data, status=status.HTTP_200_OK)
+            except json.JSONDecodeError:
+                pass
 
         try:
             resp = requests.get(
@@ -266,9 +374,22 @@ class PageHTMLAPIView(APIView):
                 "num_tags": num_tags,
                 "dom_outline": dom_outline,
                 "repeated_signatures": repeated,
+                "raw_html": soup.prettify()  # Store the prettified HTML
             }
 
-            return Response(html_extract, status=status.HTTP_200_OK)
+            # Save HTML data to file
+            os.makedirs(html_dir, exist_ok=True)
+            with open(html_path, 'w', encoding='utf-8') as f:
+                json.dump(html_extract, f, ensure_ascii=False, indent=2)
+            
+            # Store the relative path in the html field
+            page.html = os.path.relpath(html_path)
+            page.save()
+
+            # Remove raw_html from response to keep it lightweight
+            response_data = html_extract.copy()
+            del response_data['raw_html']
+            return Response(response_data, status=status.HTTP_200_OK)
 
         except Exception as exc:
             return Response(
@@ -395,15 +516,14 @@ class TakeScreenshotAPIView(APIView):
 
         api_url = "https://shot.screenshotapi.net/screenshot"
         params = {
-            "token": "RPNE9GA-2BP4KTF-JKS2K7Z-RZBR7YK",
+            "token": "",
             "url": page.url,
             "file_type": "png",
             "full_page": "true",
-            # --- fixes ---
-            "lazy_load": "true",          # scroll slowly, load everything
+            "lazy_load": "true",   
             "wait_for_event": "networkidle",
-            "delay": "2000",              # 2-second buffer (optional)
-            "no_cookie_banners": "true",  # hide GDPR overlay (optional)
+            "delay": "2000",          
+            "no_cookie_banners": "true", 
             "output": "json",
         }
 
@@ -414,6 +534,24 @@ class TakeScreenshotAPIView(APIView):
             if not shot_url:
                 return Response({"error": "Screenshot URL not returned."},
                                 status=status.HTTP_502_BAD_GATEWAY)
+
+            head = requests.head(shot_url, timeout=10)
+            content_type = head.headers.get("Content-Type", "")
+            content_length = int(head.headers.get("Content-Length", 0))
+
+            if head.status_code != 200 or not content_type.startswith("image/"):
+                return Response(
+                    {"error": "Screenshot failed—got non-image response."},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+
+            if content_length < 100_000:   
+                return Response(
+                    {"error": "Screenshot empty or placeholder image (too small)."},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+            # -------------------------
+
             return Response(
                 {"success": "Screenshot captured successfully.", "screenshot_url": shot_url}
             )
@@ -427,6 +565,7 @@ class TakeScreenshotAPIView(APIView):
             return Response(
                 {"error": f"Failed to take screenshot: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class QuickChartAPIView(APIView):
     def get(self, request):
@@ -462,3 +601,49 @@ class UserNameAPIView(APIView):
             'first_name': user.first_name,
             'last_name': user.last_name
         }, status=status.HTTP_200_OK)
+    
+class ListChartConfigsAPIView(APIView):
+    """
+    GET /toolkit/list-plots/<page_id>/
+    or
+    GET /toolkit/list-chart-configs/?page_id=<page_id>
+    """
+    def get(self, request, page_id=None):
+        # if it wasn't provided in the URL, grab from querystring
+        if page_id is None:
+            page_id = request.query_params.get("page_id")
+        if not page_id:
+            return Response(
+                {"error": "Missing required parameter: page_id"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # look up the Page
+        try:
+            page = Page.objects.get(id=page_id)
+        except Page.DoesNotExist:
+            return Response(
+                {"error": "Page not found for given page_id"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        biz_id = page.business.id
+        folder = Path("Records") / "plots" / str(biz_id) / str(page_id)
+
+        if not folder.exists():
+            return Response({"configs": []}, status=status.HTTP_200_OK)
+
+        configs = []
+        for fn in folder.glob("*.json"):
+            try:
+                cfg = json.loads(fn.read_text(encoding="utf-8"))
+                configs.append({
+                    "slug": fn.stem,
+                    "config": cfg
+                })
+            except Exception:
+                continue
+
+        return Response({"configs": configs}, status=status.HTTP_200_OK)
+    
+

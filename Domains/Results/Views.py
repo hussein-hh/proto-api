@@ -11,9 +11,16 @@ from django.utils.text import slugify
 from pathlib import Path
 from django.http import HttpResponse
 from rest_framework.response import Response
-from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui, evaluate_uba, generate_chart_configs, formulate_ui
+from Domains.Results.LLMs.agents import describe_structure, describe_styling, evaluate_ui, evaluate_uba, formulate_ui, evaluate_web_metrics, web_search_agent, uba_formulator
+import Domains.Results.LLMs.prompts as prompts 
+import Domains.Results.LLMs.agents as agents 
 
 executor = ThreadPoolExecutor()
+
+def make_dir(*parts):
+    path = os.path.join('Records', *parts)
+    os.makedirs(path, exist_ok=True)
+    return path
 
 async def run_async(func, *args):
     loop = asyncio.get_event_loop()
@@ -92,12 +99,10 @@ class PageUIReportAPIView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         try:
-            business_id = str(page.business.id)
             page_id = str(page.id)
-            folder_path = os.path.join("Records", "UI-REPORTS", business_id, page_id)
-            os.makedirs(folder_path, exist_ok=True)
-
-            file_path = os.path.join(folder_path, "ui_report.json")
+            business_id = str(page.business.id)
+            folder_path = make_dir('UI-REPORTS', business_id)
+            file_path = os.path.join(folder_path, f'ui_report_{page_id}.json')
 
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(report_data, f, ensure_ascii=False, indent=2)
@@ -113,52 +118,176 @@ class PageUIReportAPIView(APIView):
             "saved_path": file_path
         }, status=status.HTTP_200_OK)
 
+# views.py  ─────────────────────────────────────────────────────────
+import os, json, base64, logging, requests
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
+
+log = logging.getLogger("ux_eval")    
+
+PAGE_TYPE_SLUG = {
+    "landing page":         "landing",
+    "landing":              "landing",
+    "search results page":  "search",
+    "search results":       "search",
+    "search":               "search",
+    "product page":         "product",
+    "product":              "product",
+}
+
+def page_type_slug(raw: str | None) -> str | None:
+    """Normalise DB value to slug key used in criteria.py."""
+    if not raw:
+        return None
+    return PAGE_TYPE_SLUG.get(raw.strip().lower())
+
+
 class EvaluateUIAPIView(APIView):
+    """GET /ask-ai/evaluate-ui/?page_id=<id>"""
+
     def get(self, request):
         pid = request.query_params.get("page_id")
         if not pid:
-            return Response({"error": "page_id missing"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "page_id missing"},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-        # fetch page record
         try:
             page = Page.objects.get(id=pid)
         except Page.DoesNotExist:
-            return Response({"error": "Page not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "Page not found"},
+                            status=status.HTTP_404_NOT_FOUND)
 
-        # load previously saved UI report
-        ui_report_path = page.ui_report
-        if not ui_report_path:
-            return Response({"error": "UI report not generated"}, status=status.HTTP_400_BAD_REQUEST)
+        # Check if cached UI evaluation exists
+        if page.business:
+            eval_folder = make_dir('UI-EVALUATIONS', str(page.business.id))
+            eval_path = os.path.join(eval_folder, f'ui_evaluation_{pid}.json')
+            
+            if os.path.exists(eval_path):
+                try:
+                    with open(eval_path, "r", encoding="utf-8") as fh:
+                        evaluation = json.load(fh)
+                    log.info(f"page {pid} | evaluation loaded from cache")
+                    return Response({"evaluation": evaluation},
+                                    status=status.HTTP_200_OK)
+                except Exception as e:
+                    log.exception(f"page {pid} | cached evaluation processing error")
+                    # Continue to normal flow if there's an error processing cached evaluation
 
+        # First check if report exists in Records/UI-REPORTS/{business_id}
+        if page.business:
+            report_path = os.path.join('Records', 'UI-REPORTS', str(page.business.id), f'ui_report_{pid}.json')
+            if os.path.exists(report_path):
+                try:
+                    with open(report_path, "r", encoding="utf-8") as fh:
+                        report_data = json.load(fh)
+                    with open(page.screenshot, "rb") as img_fh:
+                        screenshot_b64 = base64.b64encode(img_fh.read()).decode()
+
+                    business_type = getattr(page.business, "category", "unknown")
+                    raw_type = getattr(page, "page_type", "")
+                    page_type = page_type_slug(raw_type)
+
+                    if not page_type:
+                        log.error(f"page {pid} | unknown page_type='{raw_type}'")
+                        return Response({"error": f"Unrecognised page_type '{raw_type}'"},
+                                    status=status.HTTP_400_BAD_REQUEST)
+
+                    evaluation = evaluate_ui(
+                        report_data,
+                        screenshot_b64,
+                        business_type,
+                        page_type,
+                    )
+                    
+                    # Cache the evaluation results
+                    try:
+                        with open(eval_path, "w", encoding="utf-8") as f:
+                            json.dump(evaluation, f, ensure_ascii=False, indent=2)
+                        log.info(f"page {pid} | evaluation cached successfully")
+                    except Exception as e:
+                        log.exception(f"page {pid} | failed to cache evaluation")
+                    
+                    log.info(f"page {pid} | evaluation OK (from cached report)")
+                    return Response({"evaluation": evaluation},
+                                status=status.HTTP_200_OK)
+                except Exception as e:
+                    log.exception(f"page {pid} | cached report processing error")
+                    # Continue to normal flow if there's an error processing cached report
+
+        # Original flow if no cached report exists or there was an error processing it
+        if not page.ui_report or not os.path.exists(page.ui_report):
+            try:
+                r = requests.get(
+                    f"http://proto-api-kg9r.onrender.com/ask-ai/describe-page/?page_id={pid}",
+                    timeout=(5, 180)          
+                )
+                if r.status_code != 200:
+                    log.error(f"page {pid} | report gen failed | {r.status_code}")
+                    return Response({"error": "Failed to generate UI report"},
+                                    status=status.HTTP_502_BAD_GATEWAY)
+                page.refresh_from_db()
+            except Exception as e:
+                log.exception(f"page {pid} | describe-page error")
+                return Response({"error": f"Error generating UI report: {e}"},
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Rest of the original logic
         try:
-            with open(ui_report_path, "r", encoding="utf-8") as f:
-                report_data = json.load(f)
+            with open(page.ui_report, "r", encoding="utf-8") as fh:
+                report_data = json.load(fh)
+            with open(page.screenshot, "rb") as img_fh:
+                screenshot_b64 = base64.b64encode(img_fh.read()).decode()
         except Exception as e:
-            return Response({"error": f"Could not read UI report: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # --- new: load screenshot and fetch metadata ---
-        try:
-            with open(page.screenshot, "rb") as img_f:
-                screenshot_b64 = base64.b64encode(img_f.read()).decode()
-        except Exception as e:
-            return Response({"error": f"Failed to load screenshot: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            log.exception(f"page {pid} | file load error")
+            return Response({"error": f"File load failed: {e}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         business_type = getattr(page.business, "category", "unknown")
-        page_type     = getattr(page,        "page_type", "unknown")
+        raw_type = getattr(page, "page_type", "")
+        page_type = page_type_slug(raw_type)
 
-        # call the pure-LLM agent
+        if not page_type:
+            log.error(f"page {pid} | unknown page_type='{raw_type}'")
+            return Response({"error": f"Unrecognised page_type '{raw_type}'"},
+                            status=status.HTTP_400_BAD_REQUEST)
+
         try:
             evaluation = evaluate_ui(
                 report_data,
                 screenshot_b64,
                 business_type,
-                page_type
+                page_type,
             )
+            
+            # Cache the evaluation results
+            if page.business:
+                eval_folder = make_dir('UI-EVALUATIONS', str(page.business.id))
+                eval_path = os.path.join(eval_folder, f'ui_evaluation_{pid}.json')
+                try:
+                    with open(eval_path, "w", encoding="utf-8") as f:
+                        json.dump(evaluation, f, ensure_ascii=False, indent=2)
+                    log.info(f"page {pid} | evaluation cached successfully")
+                except Exception as e:
+                    log.exception(f"page {pid} | failed to cache evaluation")
+                    
+        except ValueError as ve:
+            log.warning(f"page {pid} | validation error | {ve}")
+            return Response({"error": "Evaluation category mismatch",
+                             "detail": str(ve)},
+                            status=status.HTTP_502_BAD_GATEWAY)
         except Exception as e:
-            return Response({"error": f"Evaluation failed: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            log.exception(f"page {pid} | evaluation crash")
+            return Response({"error": "Evaluation failed",
+                             "detail": str(e)},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        return Response({"evaluation": evaluation}, status=status.HTTP_200_OK)
-    
+        log.info(f"page {pid} | evaluation OK")
+        return Response({"evaluation": evaluation},
+                        status=status.HTTP_200_OK)
+
+
 class FormulateUIAPIView(APIView):
     def get(self, request):
         pid = request.query_params.get("page_id")
@@ -180,9 +309,8 @@ class FormulateUIAPIView(APIView):
             return Response({"error":f"Formulation failed: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         business_id = str(page.business.id)
-        folder     = os.path.join("Records", "UI-FORMATS", business_id, pid)
-        os.makedirs(folder, exist_ok=True)
-        file_path  = os.path.join(folder, "formatted_report.txt")
+        folder = make_dir('UI-FORMATS', business_id)
+        file_path = os.path.join(folder, f'formatted_report_{pid}.txt')
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(formatted)
         page.formatted_report = file_path
@@ -207,9 +335,13 @@ class EvaluateUBAAPIView(APIView):
         except Exception as e:
             return Response({"error":str(e)}, status=500)
 
-        folder = os.path.join("Records", "UBA-REPORTS", pid)
-        os.makedirs(folder, exist_ok=True)
-        file_path = os.path.join(folder, "uba_report.json")
+        # Get the business ID from the page instance
+        page = up.references_page
+        if not page or not page.business:
+            return Response({"error": "Page or business not found"}, status=404)
+
+        folder = make_dir('UBA-REPORTS', str(page.business.id))
+        file_path = os.path.join(folder, f'uba_report_{pid}.json')
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump({"report": result}, f, ensure_ascii=False, indent=2)
 
@@ -221,90 +353,229 @@ class EvaluateUBAAPIView(APIView):
 BULLET_REGEX = re.compile(r'^\d+\.\s*(.+)')
 CONFIG_REGEX = re.compile(r'^\$(\{.*\})$')
 
-class GenerateChartsAPIView(APIView):
+import csv, json, re, unicodedata
+from pathlib import Path
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
+BULLET_BLOCK_RE  = re.compile(r"^\s*(\d+)\.\s+(.*)")   # 1. …    2. …
+CONFIG_LINE_RE   = re.compile(r"^\$\s*(\{.*\})\s*$")   # $ { … }
+
+def slugify(text: str) -> str:
     """
-    1. Ensures UBA evaluation exists, generating it if missing.
-    2. Reads the UBA evaluation text and raw UBA data.
-    3. Parses numbered observations.
-    4. Calls generate_chart_configs to get multiple $<config> lines.
-    5. Saves each chart under Records/plots/<business_id>/<page_id>/<descriptive-name>.png.
-    6. Returns JSON with saved file paths.
+    Very small fallback-slugifier (lowercase, ascii, dash-separated).
+    """
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    text = re.sub(r"[^\w\s-]", "", text.lower()).strip()
+    return re.sub(r"[-\s]+", "-", text) or "chart"
+
+
+PROBLEM_RE = re.compile(
+    r"(?m)^\s*1\s*-\s*Problem[:;]\s*(.+?)(?=\n\s*\d+\s*-\s*(?:Problem|Analysis|Solution)|\Z)"
+)
+
+class UBAProblemSolutionsAPIView(APIView):
+    """
+    GET /api/uba-problem-solutions/?page_id=<page_id>
     """
     def get(self, request):
-        page_id = request.query_params.get("page_id")
-        if not page_id:
+        pid = request.query_params.get("page_id")
+        if not pid:
+            return Response({"error": "page_id missing"}, status=400)
+
+        try:
+            up = Upload.objects.get(references_page_id=pid)
+        except Upload.DoesNotExist:
+            return Response({"error": "Upload not found"}, status=404)
+
+        if not up.uba_report or not os.path.exists(up.uba_report):
+            return Response({"error": "No UBA report found"}, status=404)
+
+        # Check if cached solutions exist
+        page = up.references_page
+        if page and page.business:
+            solutions_folder = make_dir('UBA-SOLUTIONS', str(page.business.id))
+            solutions_path = os.path.join(solutions_folder, f'uba_solutions_{pid}.json')
+            
+            if os.path.exists(solutions_path):
+                try:
+                    with open(solutions_path, 'r', encoding='utf-8') as f:
+                        cached_results = json.load(f)
+                    log.info(f"page {pid} | UBA solutions loaded from cache")
+                    return Response({"results": cached_results}, status=200)
+                except Exception as e:
+                    log.exception(f"page {pid} | cached UBA solutions processing error")
+                    # Continue to normal flow if error processing cached solutions
+
+        with open(up.uba_report, encoding="utf-8") as f:
+            report_text = json.load(f).get("report", "")
+
+        problems = PROBLEM_RE.findall(report_text)
+        if not problems:
+            return Response({"error": "No problem clauses found"}, status=400)
+
+        results = []
+        for clause in problems:
+            try:
+                resources = web_search_agent(clause.strip())
+            except Exception as e:
+                resources = [{"source": None, "summary": f"agent error: {e}"}]
+
+            results.append({
+                "problem": clause.strip(),
+                "solutions": resources
+            })
+
+        # Cache the solutions
+        if page and page.business:
+            solutions_folder = make_dir('UBA-SOLUTIONS', str(page.business.id))
+            solutions_path = os.path.join(solutions_folder, f'uba_solutions_{pid}.json')
+            try:
+                with open(solutions_path, 'w', encoding='utf-8') as f:
+                    json.dump(results, f, ensure_ascii=False, indent=2)
+                log.info(f"page {pid} | UBA solutions cached successfully")
+                
+                # Store the path in the Upload model if it has a field for it
+                if hasattr(up, 'uba_solutions'):
+                    up.uba_solutions = solutions_path
+                    up.save()
+            except Exception as e:
+                log.exception(f"page {pid} | failed to cache UBA solutions")
+
+        return Response({"results": results}, status=200)
+
+
+class EvaluateWebMetricsAPIView(APIView):
+    """
+    Accepts JSON body of the form:
+    {
+      "Some Page metrics": {
+        "First Contentful Paint": "1.2 s",
+        "Speed Index": "12.8 s",
+        "Largest Contentful Paint (LCP)": "27.1 s",
+        "Time to Interactive": "28.2 s",
+        "Total Blocking Time (TBT)": "390 ms",
+        "Cumulative Layout Shift (CLS)": "0"
+      }
+    }
+    Returns the WebMetricsAdvisor JSON.
+    """
+    def post(self, request):
+        # grab the only metrics object in the body
+        try:
+            raw_metrics = next(iter(request.data.values()))
+            if not isinstance(raw_metrics, dict):
+                raise ValueError
+        except Exception:
+            return Response(
+                {"error": "Invalid format: send one top-level key with a metrics dict"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            result_text = evaluate_web_metrics(raw_metrics)
+            result_json = json.loads(result_text)
+        except Exception as e:
+            return Response(
+                {"error": f"Evaluation failed: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        return Response({"web_metrics_report": result_json}, status=status.HTTP_200_OK)
+
+
+class FormulateUBAAPIView(APIView):
+    def get(self, request):
+        pid = request.query_params.get("page_id")
+        if not pid:
             return Response({"error": "page_id missing"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            up = Upload.objects.get(references_page__id=page_id)
+            up = Upload.objects.get(references_page_id=pid)
         except Upload.DoesNotExist:
             return Response({"error": "Upload not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        business_id = up.references_page.business.id
+        if not up.uba_report or not os.path.exists(up.uba_report):
+            return Response({"error": "UBA report not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Generate UBA report if missing
-        if not up.uba_report or not Path(up.uba_report).exists():
+        # Check if formulation already exists
+        formulation_dir = os.path.join('Records', 'UBA-FORMULATIONS', str(up.references_page.business.id))
+        formulation_path = os.path.join(formulation_dir, f'uba_formulation_{pid}.json')
+        
+        if os.path.exists(formulation_path):
             try:
-                report_text = evaluate_uba(up.path)
-                folder_uba = Path("Records") / "UBA-REPORTS" / str(business_id) / str(page_id)
-                folder_uba.mkdir(parents=True, exist_ok=True)
-                report_path = folder_uba / "uba_report.json"
-                with report_path.open("w", encoding="utf-8") as f:
-                    json.dump({"report": report_text}, f, ensure_ascii=False, indent=2)
-                up.uba_report = str(report_path)
-                up.save()
-            except Exception as e:
-                return Response({"error": f"Error generating UBA report: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                with open(formulation_path, 'r', encoding='utf-8') as f:
+                    stored_formulation = json.load(f)
+                return Response(
+                    {"uba_formulation": stored_formulation, "saved_path": formulation_path},
+                    status=status.HTTP_200_OK
+                )
+            except json.JSONDecodeError:
+                # If stored file is corrupted, continue to generate new formulation
+                pass
 
-        # Load evaluation report
+        # If no stored formulation exists or it's corrupted, generate new one
+        with open(up.uba_report, "r", encoding="utf-8") as f:
+            raw = json.load(f).get("report")
+
         try:
-            with open(up.uba_report, encoding="utf-8") as f:
-                evaluation_text = json.load(f)["report"]
+            formulation = uba_formulator(raw)   # now a dict
         except Exception as e:
-            return Response({"error": f"Cannot load UBA report: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Parse observations
-        observations = [m.group(1) for m in (BULLET_REGEX.match(line) for line in evaluation_text.splitlines()) if m]
+        # save JSON
+        os.makedirs(formulation_dir, exist_ok=True)
+        with open(formulation_path, "w", encoding="utf-8") as f:
+            json.dump(formulation, f, ensure_ascii=False, indent=2)
 
-        # Load raw UBA data
+        # persist path (ensure your model has this field)
+        up.uba_formulation_report = formulation_path
+        up.save()
+
+        return Response(
+            {"uba_formulation": formulation, "saved_path": formulation_path},
+            status=status.HTTP_200_OK
+        )
+    
+class ChatAPIView(APIView):
+    """
+    POST /ask-ai/chat/
+    Body JSON:
+      {
+        "persona": "zahra",         # optional; must match a key in prompts.PERSONA_MESSAGES
+        "messages": [               # required
+          { "role": "user", "content": "Hello" },
+          ...
+        ]
+      }
+    """
+    def post(self, request):
+        data      = request.data or {}
+        user_msgs = data.get("messages", [])
+        persona   = (data.get("persona") or "").strip()
+
+        # Grab both prompts
+        default_msg = (prompts.default_system_message or "").strip()
+        persona_msg = (prompts.PERSONA_MESSAGES.get(persona) or "").strip()
+
+        if persona and persona_msg:
+            system_content = persona_msg
+            log.info(f"[ChatAPIView] Using persona prompt for: {persona!r}")
+        else:
+            system_content = default_msg
+            if persona and not persona_msg:
+                log.warning(f"[ChatAPIView] Unknown persona {persona!r}; using default")
+
+        # Build the single-system‐message payload
+        full_msgs = [{"role": "system", "content": system_content}]
+        full_msgs.extend(user_msgs)
+        log.debug(f"[ChatAPIView] Payload to agent: {full_msgs}")
+
         try:
-            if up.path.lower().endswith(".csv"):
-                with open(up.path, newline="", encoding="utf-8") as f:
-                    rows = list(csv.DictReader(f))
-                uba_json_str = json.dumps(rows)
-            else:
-                uba_json_str = Path(up.path).read_text(encoding="utf-8")
+            reply = agents.chat_completion(full_msgs)
         except Exception as e:
-            return Response({"error": f"Cannot load UBA data: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            log.error(f"[ChatAPIView] chat_completion failed: {e}", exc_info=True)
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Generate chart configs
-        raw_configs = generate_chart_configs(evaluation_text, uba_json_str)
-        config_lines = [m.group(1) for m in (CONFIG_REGEX.match(line.strip()) for line in raw_configs.splitlines()) if m]
-        if not config_lines:
-            return Response({"error": "No configs produced", "raw": raw_configs}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # Save charts
-        out_folder = Path("Records") / "plots" / str(business_id) / str(page_id)
-        out_folder.mkdir(parents=True, exist_ok=True)
-
-        stored = []
-        for obs, cfg in zip(observations, config_lines):
-            try:
-                json.loads(cfg)
-            except ValueError:
-                continue
-            slug = slugify(" ".join(obs.split()[:5])) or 'chart'
-            file_path = out_folder / f"{slug}.png"
-            resp = requests.get(
-                "http://127.0.0.1:8000/toolkit/plot-chart/",
-                params={"config": cfg}
-            )
-            if resp.status_code != 200:
-                continue
-            file_path.write_bytes(resp.content)
-            stored.append(str(file_path))
-
-        if not stored:
-            return Response({"error": "All chart requests failed"}, status=status.HTTP_502_BAD_GATEWAY)
-
-        return Response({"charts_saved": stored}, status=status.HTTP_200_OK)
+        return Response({"reply": reply}, status=status.HTTP_200_OK)
