@@ -150,3 +150,51 @@ This subdomain operates with a single agent:
 
 This subdomain provides the user with an AI chat that guides them through the results of teh previous subdomain. Therefore, the results of all previous subdomains is dumped through in the prompt of the agent of teh chat.
 
+---
+
+## Running the App Locally
+
+To run this backend app on your local machine, follow the steps below:
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/hussein-hh/proto-api.git
+cd proto-backend
+```
+
+### 2. Create and Activate a Virtual Environment
+
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows, use: venv\Scripts\activate
+```
+
+### 3. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Set Environment Variables
+
+Create a `.env` file in the root directory and populate it with required keys, which can be found at env.example
+
+
+### 5. Run Migrations
+
+```bash
+python manage.py migrate
+```
+
+### 6. Start the Development Server
+
+```bash
+python manage.py runserver
+```
+
+### 7. Test Endpoints
+
+Use Postman or any API client to hit the endpoints listed in the **Domains** section.
+
+
