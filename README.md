@@ -83,28 +83,31 @@ Provides helper functionalities utilized by the AI agents, such as taking screen
 ---
 
 
-## Results Domain
+## Results
 
-The `Results` domain is the core of the application, housing the AI-powered functionalities that drive meaningful insights. It is composed of three **logical subdomains**:
+The `Results` domain is the core of the application, housing the AI-powered functionalities that drive meaningful insights. It is composed of four **logical subdomains**:
 
 - **UI Architecture (`ui-subdomain`)**
 - **User Behavior Analytics Architecture (`uba-subdomain`)**
 - **Web Metrics Agent (`webmetrics-subdomain`)**
+- - **AI Chat (`chat-subdomain`)**
 
-> Note: These subdomains are **behavioral**, not structural. The file organization does not reflect this split directly.
+> Note that these subdomains are **behavioral**, not structural. The file organization does not reflect this split directly. Rather, they are reflected in the workflow of the agents (as will be dwmonstrated later.)
+
+The strcuture of this domain's directiry is as follows:
 
 ```
 Results/
 ├── LLMs/
-│   ├── agents.py      # Defines agent logic
+│   ├── agents.py      # Defines the agents
 │   └── prompts.py     # Stores prompts for each agent
 │
-└── views.py           # Wraps agents into API endpoints
+└── views.py           # Wraps agents into API endpoints and orchestrate them
 ```
 
 ### Agent Workflow
 
-Each agent is defined in `agents.py` and its corresponding prompt is written in `prompts.py`. After an agent is created, it's exposed through an endpoint in `views.py`. Once all agents are tested independently via Postman, they are orchestrated together into a coherent flow to fulfill the purpose of their respective subdomain.
+Each agent is defined in `agents.py` and its corresponding prompt is written in `prompts.py`. After an agent is created, it's exposed through an endpoint in `views.py`. Once all agents are tested independently via Postman, they are orchestrated together into a coherent flow to fulfill the purpose of their respective subdomain. Below is a breakdown of those subdomians:
 
 ---
 
@@ -149,3 +152,8 @@ This subdomain operates with a single agent:
 - It fetches **web performance metrics** (like LCP, CLS, etc.) by calling tools in the Toolkit domain.
 - The agent evaluates those metrics to produce a concise report for the business.
 
+---
+
+### AI Chat Subdomain
+
+This subdomain provides the user with an AI chat that guides them through the results of teh previous subdomain. Therefore, the results of all previous subdomains is dumped through in the prompt of the agent of teh chat.
