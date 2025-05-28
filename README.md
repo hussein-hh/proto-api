@@ -157,3 +157,11 @@ This subdomain operates with a single agent:
 ### AI Chat Subdomain
 
 This subdomain provides the user with an AI chat that guides them through the results of teh previous subdomain. Therefore, the results of all previous subdomains is dumped through in the prompt of the agent of teh chat.
+
+---
+
+### End Product
+
+After all result-subsomains stiched together, and when connected to a front end, all outputs should render on the dashboard as follows:
+
+![Full SS](pictures/fullss.png)
