@@ -110,7 +110,7 @@ Each agent is defined in `agents.py` and its corresponding prompt is written in 
 
 ### UI Subdomain
 
-![UI Architecture](pictures/ui-arch)
+![UI Architecture](pictures/ui-arch.png)
 
 This subdomain starts by invoking two agents:
 - One to extract the **component structure** of the page.
