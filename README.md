@@ -8,7 +8,7 @@ The app is built using an API-based and domain-driven approach, ensuring a modul
 
 Below is a walkthrough of the app’s internal structure and instructions on how to test its endpoints.
 
-> Note: this repo only include the backend logic to build an API server. You find the code and instructions for building the frintend in [this repo.]((https://github.com/ZahraFalih/proto-frontend))
+> Note: this repo only include the backend logic to build an API server. You find the code and instructions for building the frintend in [this repo.](https://github.com/ZahraFalih/proto-frontend)
 ## Domains
 
 Inside the `Domains/` folder, you’ll find five subfolders—each representing a distinct domain. In line with Domain-Driven Design (DDD) principles, a domain encapsulates a set of related functionalities.
