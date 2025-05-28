@@ -1,6 +1,6 @@
 ## Overview
 
-This is the backend repository for **Proto** — a university project that serves as a proof of concept for employing agentic AI in the UX development process.
+This is the backend repository for **Proto** - a university project that serves as a proof of concept for employing agentic AI in the UX development process.
 
 The app is built using an API-based and domain-driven approach, ensuring a modular architecture that can run independently of any frontend. This makes it easily testable using tools like Postman.
 
