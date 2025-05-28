@@ -2,6 +2,8 @@
 
 This is the backend repository for **Proto** - a university project that serves as a proof of concept for employing agentic AI in the UX development process.
 
+The **app's general functionality** could be described as follows: it intakes the specifications of an e-commerce web page (the landing page, search page, or product page) and uses agentic AI architecture to produce actionable recomendations to enhance the UX of that page. 
+
 The app is built using an API-based and domain-driven approach, ensuring a modular architecture that can run independently of any frontend. This makes it easily testable using tools like Postman.
 
 Below is a walkthrough of the app’s internal structure and instructions on how to test its endpoints.
