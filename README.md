@@ -4,14 +4,15 @@ This is the backend repository for **Proto** - a university project that serves 
 
 The **app's general functionality** could be described as follows: it intakes the specifications of an e-commerce web page (the landing page, search page, or product page) and uses agentic AI architecture to produce actionable recomendations to enhance the UX of that page. 
 
-The app is built using an API-based and domain-driven approach, ensuring a modular architecture that can run independently of any frontend. This makes it easily testable using tools like Postman.
+The app is built using an API-based and domain-driven approach to ensure a modular architecture that can run independently as a server. This makes it easily testable using tools like Postman.
 
 Below is a walkthrough of the app’s internal structure and instructions on how to test its endpoints.
 
-> Note: this repo only include the backend logic to build an API server. You find the code and instructions for building the frontend in [this repo.](https://github.com/ZahraFalih/proto-frontend)
+> Note: this repo only include the backend logic to build an API server. You can find the code and instructions for building the frontend in [this repo.](https://github.com/ZahraFalih/proto-frontend)
+
 ## Domains
 
-Inside the `Domains/` folder, you’ll find five subfolders—each representing a distinct domain. In line with Domain-Driven Design (DDD) principles, a domain encapsulates a set of related functionalities.
+Inside the `Domains/` folder, you’ll find five subfolders, each representing a distinct domain. In line with Domain-Driven Design (DDD) principles, a domain encapsulates a set of related functionalities.
 
 ```
 Domains/
@@ -80,7 +81,7 @@ Provides helper functionalities utilized by the AI agents, such as taking screen
 
 ## Results
 
-The `Results` domain is the core of the application, housing the AI-powered functionalities that drive meaningful insights. It is composed of four **logical subdomains**:
+The `Results` domain is the core of the application, housing the AI-powered functionalities that produce the recommendations. It is composed of four **logical subdomains**:
 
 - **UI Architecture (`ui-subdomain`)**
 - **User Behavior Analytics Architecture (`uba-subdomain`)**
