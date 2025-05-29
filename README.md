@@ -152,7 +152,7 @@ This subdomain operates with a single agent:
 
 ### AI Chat Subdomain
 
-This subdomain provides the user with an AI chat that guides them through the results of teh previous subdomain. Therefore, the results of all previous subdomains is dumped through in the prompt of the agent of teh chat.
+This subdomain provides the user with an AI chat that guides them through the results of the previous subdomain. Therefore, the results of all previous subdomains is dumped through in the prompt of the agent of teh chat.
 
 ---
 
