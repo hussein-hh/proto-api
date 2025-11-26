@@ -7,18 +7,14 @@ import base64
 import requests
 import concurrent.futures
 import xml.etree.ElementTree as ET
-
 from collections import Counter
 from urllib.parse import urljoin
-
 from bs4 import BeautifulSoup
-
 from django.conf import settings
 from django.http import HttpResponse
 from django.utils.text import slugify
 from django.core.cache import cache
 from django.contrib.auth import get_user_model
-
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
