@@ -7,6 +7,7 @@ import base64
 import requests
 import concurrent.futures
 import xml.etree.ElementTree as ET
+
 from collections import Counter
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
